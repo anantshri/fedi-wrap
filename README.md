@@ -1,10 +1,29 @@
 # 🎁 Fediverse Year Wrapped
 
-Generate beautiful, Spotify Wrapped-style year-in-review reports for your Fediverse account with AI-powered personality insights.
+**fedi-wrap** - A Spotify-style year wrap for your Fediverse instance (Mastodon-compatible API).
+
+Generate beautiful, year-in-review reports for your Fediverse account with AI-powered personality insights.
 
 Works with **any Mastodon-compatible server**: Mastodon, GoToSocial, Pleroma, Misskey, Akkoma, etc.
 
 ![Year Wrapped Preview](https://img.shields.io/badge/Fediverse-Wrapped-8b5cf6?style=for-the-badge)
+
+## 🤔 Why This Exists
+
+Most "Mastodon Wrapped" tools assume public API access — you give them your handle, and they fetch your data. But this doesn't work for everyone:
+
+- **GoToSocial** and other servers don't expose public APIs for user data
+- **Privacy-conscious users** don't want to hand their access tokens to third-party services
+- **Self-hosters** want tools that work offline and respect their data sovereignty
+
+### Our Solution: Local-First via `toot` CLI
+
+Instead of building yet another web service that asks for your credentials, we leverage **[`toot`](https://github.com/ihabunek/toot)** — a command-line tool many Fediverse users already have installed and authenticated. This means:
+
+- ✅ **No tokens shared** — your credentials never leave your machine
+- ✅ **Works with any server** — if `toot` can access it, so can we
+- ✅ **Fully offline** — everything runs locally (except optional AI)
+- ✅ **Reuse existing auth** — no new logins or OAuth flows
 
 ## ✨ Features
 
@@ -16,6 +35,7 @@ Works with **any Mastodon-compatible server**: Mastodon, GoToSocial, Pleroma, Mi
   - Monthly, hourly, and weekly distribution charts
 
 - **🧠 AI-Powered Insights** (via Ollama, optional)
+  - Analyzes **all posts** (not just a sample) using chunked processing
   - Emotional journey analysis
   - Personality trait detection
   - Writing style characterization
@@ -30,14 +50,18 @@ Works with **any Mastodon-compatible server**: Mastodon, GoToSocial, Pleroma, Mi
   - Top posts by engagement
   - Local avatar download
 
-- **🔐 Privacy-First**
-  - Uses authenticated `toot` CLI (your data stays local)
-  - All processing happens on your machine
-  - No external services except optional AI analysis
+- **🔐 Privacy-First & Local**
+  - **No tokens or credentials shared** — uses your existing `toot` CLI session
+  - All data fetching and processing happens on your machine
+  - No web service, no OAuth, no third-party access to your account
+  - Optional AI analysis via local Ollama (or skip entirely)
 
 ## 📋 Prerequisites
 
 1. **toot CLI** - Mastodon command-line client
+   
+   Install from: [https://github.com/ihabunek/toot](https://github.com/ihabunek/toot)
+   
    ```bash
    # Install via Homebrew (macOS)
    brew install toot
@@ -68,18 +92,18 @@ Works with **any Mastodon-compatible server**: Mastodon, GoToSocial, Pleroma, Mi
    - Recommended models: `phi4:14b`, `llama3.1:latest`
    - If unavailable, AI section is simply omitted
 
+## 🤖 AI-Assisted Development
+
+This project was developed with the assistance of AI tools, most notably **Cursor IDE** and **Claude Code**. These tools helped accelerate development and improve velocity. All AI-generated code has been carefully reviewed and validated through human inspection to ensure it aligns with the project's intended functionality and quality standards.
+
+
 ## 🚀 Quick Start
 
 ### 1. Configure (Optional)
 
-Edit `.env` if you want to customize settings:
 ```bash
-# Default year (can be overridden via command line)
-DEFAULT_YEAR=2025
-
-# Ollama AI Configuration (optional)
-OLLAMA_BASE_URL="http://localhost:11434"
-OLLAMA_MODEL="phi4:14b"
+cp .env.example .env
+# Edit .env if needed
 ```
 
 **Note:** Account is auto-detected from your active `toot` session!
@@ -115,10 +139,11 @@ open wrapped_2024_user_instance.social.html
 ## 📁 Project Structure
 
 ```
-fediverse-wrapped/
+fedi-wrap/
 ├── wrapped.sh             # Main script (fetch + generate)
 ├── template.html          # HTML template with placeholders
-├── .env                   # Configuration file
+├── .env.example           # Example configuration
+├── .env                   # Your configuration (create from example)
 ├── avatars/               # Downloaded profile pictures
 ├── index.html             # Landing page linking all reports
 ├── statuses_YEAR_*.json   # Fetched post data (generated)
@@ -128,7 +153,13 @@ fediverse-wrapped/
 
 ## ⚙️ Configuration
 
-All settings are in `.env`:
+Copy `.env.example` to `.env` and customize:
+
+```bash
+cp .env.example .env
+```
+
+Settings in `.env`:
 
 ```bash
 # Default year (can be overridden via command line)
@@ -136,12 +167,10 @@ DEFAULT_YEAR=2025
 
 # Ollama AI Configuration (optional - skipped if unreachable)
 OLLAMA_BASE_URL="http://localhost:11434"
-OLLAMA_MODEL="phi4:14b"
-OLLAMA_MAX_TOKENS=2500
-OLLAMA_TEMPERATURE=0.7
+OLLAMA_MODEL="llama3.1:latest"
 
-# Number of posts to sample for AI analysis
-AI_SAMPLE_SIZE=50
+# Posts per chunk for AI analysis (all posts are analyzed)
+AI_CHUNK_SIZE=50
 ```
 
 ### Customizing Year Theme Colors

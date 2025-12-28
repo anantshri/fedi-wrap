@@ -18,7 +18,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DEFAULT_YEAR="${DEFAULT_YEAR:-2025}"
 OLLAMA_BASE_URL="${OLLAMA_BASE_URL:-http://localhost:11434}"
 OLLAMA_MODEL="${OLLAMA_MODEL:-llama3.1:latest}"
-AI_SAMPLE_SIZE="${AI_SAMPLE_SIZE:-50}"
+AI_CHUNK_SIZE="${AI_CHUNK_SIZE:-50}"
 
 # Parse arguments
 YEAR="$DEFAULT_YEAR"
@@ -388,43 +388,95 @@ generate_report() {
     if [ "$SKIP_AI" = false ]; then
         echo "🤖 Checking AI..."
         if curl -s --connect-timeout 3 "$OLLAMA_BASE_URL/api/tags" >/dev/null 2>&1; then
-            echo "   AI available, analyzing..."
+            echo "   AI available, analyzing all posts in chunks..."
             
-            local SAMPLE=$(jq -r --arg y "$YEAR" --argjson n "$AI_SAMPLE_SIZE" '
-                [.statuses[] | select(.reblog == null and .created_at | startswith($y))][:$n] |
-                map(.content | gsub("<[^>]*>";""))[:$n] | join("\n---\n")
+            # Get all original posts
+            local ALL_POSTS=$(jq --arg y "$YEAR" '
+                [.statuses[] | select(.reblog == null and (.created_at | startswith($y)))] |
+                map(.content | gsub("<[^>]*>";""))
             ' "$DATA_FILE")
             
-            local PROMPT="Analyze these Fediverse posts from $YEAR. Return ONLY valid JSON:
-{\"mood\":\"one word\",\"mood_desc\":\"2 sentences\",\"persona\":\"title\",\"persona_desc\":\"2 sentences\",\"traits\":[\"trait1\",\"trait2\"],\"passion\":\"topic\",\"topics\":[\"t1\",\"t2\"],\"tone\":\"word\",\"style\":\"brief desc\",\"narrative\":\"3 sentences about their year\",\"fun_fact\":\"observation\"}
-
-Posts:
-$SAMPLE"
+            local TOTAL_POSTS=$(echo "$ALL_POSTS" | jq 'length')
+            local CHUNKS=$(( (TOTAL_POSTS + AI_CHUNK_SIZE - 1) / AI_CHUNK_SIZE ))
             
-            local AI_RESP=$(curl -s --max-time 60 "$OLLAMA_BASE_URL/api/generate" \
-                -d "$(jq -n --arg m "$OLLAMA_MODEL" --arg p "$PROMPT" '{model:$m,prompt:$p,stream:false}')" \
-                2>/dev/null | jq -r '.response // empty')
+            echo "   Processing $TOTAL_POSTS posts in $CHUNKS chunk(s)..."
             
-            if [ -n "$AI_RESP" ]; then
-                local AI_JSON=$(echo "$AI_RESP" | sed 's/^```json//;s/```$//' | tr -d '\n')
+            local CHUNK_ANALYSES=""
+            local chunk=0
+            local TEMP_REQ="$SCRIPT_DIR/.ai_request.json"
+            
+            while [ $chunk -lt $CHUNKS ]; do
+                local start=$((chunk * AI_CHUNK_SIZE))
+                local end_idx=$((start + AI_CHUNK_SIZE))
+                [ $end_idx -gt $TOTAL_POSTS ] && end_idx=$TOTAL_POSTS
                 
-                if echo "$AI_JSON" | jq . >/dev/null 2>&1; then
-                    local AI_MOOD=$(echo "$AI_JSON" | jq -r '.mood // "Engaged"')
-                    local AI_MOOD_D=$(echo "$AI_JSON" | jq -r '.mood_desc // ""')
-                    local AI_PERS=$(echo "$AI_JSON" | jq -r '.persona // "Active"')
-                    local AI_PERS_D=$(echo "$AI_JSON" | jq -r '.persona_desc // ""')
-                    local AI_TRAITS=$(echo "$AI_JSON" | jq -r '.traits[:5] | map("<span class=\"trait-tag\">\(.)</span>") | join("")')
-                    local AI_TONE=$(echo "$AI_JSON" | jq -r '.tone // "Conversational"')
-                    local AI_STYLE=$(echo "$AI_JSON" | jq -r '.style // ""')
-                    local AI_PASSION=$(echo "$AI_JSON" | jq -r '.passion // "Various"')
-                    local AI_TOPICS=$(echo "$AI_JSON" | jq -r '.topics[:4] | map("<span class=\"trait-tag\">\(.)</span>") | join("")')
-                    local AI_NARR=$(echo "$AI_JSON" | jq -r '.narrative // ""')
-                    local AI_FUN=$(echo "$AI_JSON" | jq -r '.fun_fact // ""')
+                echo "   Chunk $((chunk + 1))/$CHUNKS (posts $((start + 1))-$end_idx)..."
+                
+                # Build prompt and request via temp file to handle escaping
+                local CHUNK_POSTS=$(echo "$ALL_POSTS" | jq -r --argjson s "$start" --argjson n "$AI_CHUNK_SIZE" '.[$s:$s+$n] | join("\n---\n")')
+                
+                jq -n --arg m "$OLLAMA_MODEL" --arg posts "$CHUNK_POSTS" '{
+                    model: $m,
+                    prompt: ("Analyze these Fediverse posts. Return ONLY valid JSON:\n{\"themes\":[\"t1\",\"t2\"],\"mood\":\"word\",\"topics\":[\"t1\",\"t2\"],\"traits\":[\"t1\"],\"style\":\"brief\"}\n\nPosts:\n" + $posts),
+                    stream: false
+                }' > "$TEMP_REQ"
+                
+                local CHUNK_RESP=$(curl -s --max-time 120 "$OLLAMA_BASE_URL/api/generate" \
+                    -d @"$TEMP_REQ" 2>/dev/null | jq -r '.response // empty')
+                
+                if [ -n "$CHUNK_RESP" ]; then
+                    local CLEAN_RESP=$(echo "$CHUNK_RESP" | sed 's/^```json//;s/```$//' | tr -d '\n')
+                    if echo "$CLEAN_RESP" | jq . >/dev/null 2>&1; then
+                        CHUNK_ANALYSES="${CHUNK_ANALYSES}Chunk $((chunk+1)): ${CLEAN_RESP}\n"
+                        echo "      ✓ Got analysis"
+                    else
+                        echo "      ✗ Invalid JSON"
+                    fi
+                else
+                    echo "      ✗ No response"
+                fi
+                
+                chunk=$((chunk + 1))
+            done
+            
+            rm -f "$TEMP_REQ"
+            
+            # Synthesize all chunk analyses
+            if [ -n "$CHUNK_ANALYSES" ]; then
+                echo "   Synthesizing insights from all chunks..."
+                
+                jq -n --arg m "$OLLAMA_MODEL" --arg analyses "$CHUNK_ANALYSES" --arg total "$TOTAL_POSTS" --arg year "$YEAR" '{
+                    model: $m,
+                    prompt: ("You analyzed " + $total + " Fediverse posts from " + $year + " in chunks. Here are the analyses:\n\n" + $analyses + "\n\nSynthesize into FINAL analysis. Return ONLY valid JSON:\n{\"mood\":\"one word\",\"mood_desc\":\"2 sentences\",\"persona\":\"creative title\",\"persona_desc\":\"2 sentences\",\"traits\":[\"t1\",\"t2\",\"t3\"],\"passion\":\"main topic\",\"topics\":[\"t1\",\"t2\",\"t3\"],\"tone\":\"word\",\"style\":\"brief desc\",\"narrative\":\"3 sentences about their year\",\"fun_fact\":\"observation\"}"),
+                    stream: false
+                }' > "$SCRIPT_DIR/.ai_synth.json"
+                
+                local AI_RESP=$(curl -s --max-time 120 "$OLLAMA_BASE_URL/api/generate" \
+                    -d @"$SCRIPT_DIR/.ai_synth.json" 2>/dev/null | jq -r '.response // empty')
+                
+                rm -f "$SCRIPT_DIR/.ai_synth.json"
+                
+                if [ -n "$AI_RESP" ]; then
+                    local AI_JSON=$(echo "$AI_RESP" | sed 's/^```json//;s/```$//' | tr -d '\n')
                     
-                    echo "   Mood: $AI_MOOD, Persona: $AI_PERS"
-                    
-                    AI_SECTION="<section class=\"ai-insights\">
+                    if echo "$AI_JSON" | jq . >/dev/null 2>&1; then
+                        local AI_MOOD=$(echo "$AI_JSON" | jq -r '.mood // "Engaged"')
+                        local AI_MOOD_D=$(echo "$AI_JSON" | jq -r '.mood_desc // ""')
+                        local AI_PERS=$(echo "$AI_JSON" | jq -r '.persona // "Active"')
+                        local AI_PERS_D=$(echo "$AI_JSON" | jq -r '.persona_desc // ""')
+                        local AI_TRAITS=$(echo "$AI_JSON" | jq -r '.traits[:5] | map("<span class=\"trait-tag\">\(.)</span>") | join("")')
+                        local AI_TONE=$(echo "$AI_JSON" | jq -r '.tone // "Conversational"')
+                        local AI_STYLE=$(echo "$AI_JSON" | jq -r '.style // ""')
+                        local AI_PASSION=$(echo "$AI_JSON" | jq -r '.passion // "Various"')
+                        local AI_TOPICS=$(echo "$AI_JSON" | jq -r '.topics[:4] | map("<span class=\"trait-tag\">\(.)</span>") | join("")')
+                        local AI_NARR=$(echo "$AI_JSON" | jq -r '.narrative // ""')
+                        local AI_FUN=$(echo "$AI_JSON" | jq -r '.fun_fact // ""')
+                        
+                        echo "   ✓ Mood: $AI_MOOD, Persona: $AI_PERS"
+                        
+                        AI_SECTION="<section class=\"ai-insights\">
 <h2>🤖 AI-Powered Insights</h2>
+<p style=\"color:var(--text-muted);font-size:0.85rem;margin-bottom:1rem;\">Based on analysis of all $TOTAL_POSTS original posts</p>
 <div class=\"narrative\">\"$AI_NARR\"</div>
 <div class=\"ai-grid\">
 <div class=\"ai-card\"><div class=\"ai-card-title\">Emotional Vibe</div><div class=\"ai-card-value\">$AI_MOOD</div><div class=\"ai-card-desc\">$AI_MOOD_D</div></div>
@@ -434,11 +486,14 @@ $SAMPLE"
 </div>
 <div class=\"fun-fact\"><span class=\"fun-fact-icon\">💡</span><span class=\"fun-fact-text\">$AI_FUN</span></div>
 </section>"
+                    else
+                        echo "   AI synthesis invalid, skipping"
+                    fi
                 else
-                    echo "   AI response invalid, skipping"
+                    echo "   No synthesis response, skipping"
                 fi
             else
-                echo "   No AI response, skipping"
+                echo "   No chunk analyses succeeded, skipping"
             fi
         else
             echo "   AI not reachable, skipping"
@@ -487,15 +542,25 @@ $SAMPLE"
         -e "s|{{LAST_POST}}|$LAST|g" \
         "$TEMPLATE" > "$OUTPUT_FILE.tmp"
     
-    # Replace multiline sections (can't do with sed -e)
-    awk -v bars="$MONTHLY_BARS" '{gsub(/\{\{MONTHLY_BARS\}\}/, bars)}1' "$OUTPUT_FILE.tmp" > "$OUTPUT_FILE.tmp2" && mv "$OUTPUT_FILE.tmp2" "$OUTPUT_FILE.tmp"
-    awk -v bars="$HOURLY_BARS" '{gsub(/\{\{HOURLY_BARS\}\}/, bars)}1' "$OUTPUT_FILE.tmp" > "$OUTPUT_FILE.tmp2" && mv "$OUTPUT_FILE.tmp2" "$OUTPUT_FILE.tmp"
-    awk -v bars="$WEEKDAY_BARS" '{gsub(/\{\{WEEKDAY_BARS\}\}/, bars)}1' "$OUTPUT_FILE.tmp" > "$OUTPUT_FILE.tmp2" && mv "$OUTPUT_FILE.tmp2" "$OUTPUT_FILE.tmp"
-    awk -v dist="$CONTENT_DIST" '{gsub(/\{\{CONTENT_DIST\}\}/, dist)}1' "$OUTPUT_FILE.tmp" > "$OUTPUT_FILE.tmp2" && mv "$OUTPUT_FILE.tmp2" "$OUTPUT_FILE.tmp"
-    awk -v tags="$HASHTAGS" '{gsub(/\{\{HASHTAGS_HTML\}\}/, tags)}1' "$OUTPUT_FILE.tmp" > "$OUTPUT_FILE.tmp2" && mv "$OUTPUT_FILE.tmp2" "$OUTPUT_FILE.tmp"
-    awk -v posts="$TOP_POSTS" '{gsub(/\{\{TOP_POSTS_HTML\}\}/, posts)}1' "$OUTPUT_FILE.tmp" > "$OUTPUT_FILE.tmp2" && mv "$OUTPUT_FILE.tmp2" "$OUTPUT_FILE.tmp"
-    awk -v cal="$CALENDAR" '{gsub(/\{\{CALENDAR_HTML\}\}/, cal)}1' "$OUTPUT_FILE.tmp" > "$OUTPUT_FILE.tmp2" && mv "$OUTPUT_FILE.tmp2" "$OUTPUT_FILE.tmp"
-    awk -v ai="$AI_SECTION" '{gsub(/\{\{AI_SECTION\}\}/, ai)}1' "$OUTPUT_FILE.tmp" > "$OUTPUT_FILE.tmp2" && mv "$OUTPUT_FILE.tmp2" "$OUTPUT_FILE.tmp"
+    # Replace multiline sections using temp files (awk can't handle newlines in -v)
+    replace_placeholder() {
+        local placeholder="$1"
+        local content="$2"
+        local tmpfile="$SCRIPT_DIR/.placeholder_content"
+        echo "$content" > "$tmpfile"
+        # Use perl for multiline replacement
+        perl -i -pe "BEGIN{undef \$/; open(F,'$tmpfile'); \$r=<F>; chomp \$r;} s/\Q{{$placeholder}}\E/\$r/g" "$OUTPUT_FILE.tmp"
+        rm -f "$tmpfile"
+    }
+    
+    replace_placeholder "MONTHLY_BARS" "$MONTHLY_BARS"
+    replace_placeholder "HOURLY_BARS" "$HOURLY_BARS"
+    replace_placeholder "WEEKDAY_BARS" "$WEEKDAY_BARS"
+    replace_placeholder "CONTENT_DIST" "$CONTENT_DIST"
+    replace_placeholder "HASHTAGS_HTML" "$HASHTAGS"
+    replace_placeholder "TOP_POSTS_HTML" "$TOP_POSTS"
+    replace_placeholder "CALENDAR_HTML" "$CALENDAR"
+    replace_placeholder "AI_SECTION" "$AI_SECTION"
     
     mv "$OUTPUT_FILE.tmp" "$OUTPUT_FILE"
     
@@ -509,7 +574,7 @@ $SAMPLE"
 
 echo ""
 echo "╔══════════════════════════════════════╗"
-echo "║       Fediverse Year Wrapped 🎁      ║"
+echo "║            fedi-wrap 🎁               ║"
 echo "╚══════════════════════════════════════╝"
 echo ""
 echo "Account: $ACCOUNT"
