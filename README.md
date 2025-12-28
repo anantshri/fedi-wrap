@@ -1,6 +1,8 @@
-# 🎁 GoToSocial Year Wrapped
+# 🎁 Fediverse Year Wrapped
 
-Generate beautiful, Spotify Wrapped-style year-in-review reports for your GoToSocial/Mastodon account with AI-powered personality insights.
+Generate beautiful, Spotify Wrapped-style year-in-review reports for your Fediverse account with AI-powered personality insights.
+
+Works with **any Mastodon-compatible server**: Mastodon, GoToSocial, Pleroma, Misskey, Akkoma, etc.
 
 ![Year Wrapped Preview](https://img.shields.io/badge/Fediverse-Wrapped-8b5cf6?style=for-the-badge)
 
@@ -13,18 +15,20 @@ Generate beautiful, Spotify Wrapped-style year-in-review reports for your GoToSo
   - Activity heatmap calendar
   - Monthly, hourly, and weekly distribution charts
 
-- **🧠 AI-Powered Insights** (via Ollama)
+- **🧠 AI-Powered Insights** (via Ollama, optional)
   - Emotional journey analysis
   - Personality trait detection
   - Writing style characterization
   - Interest and passion topic identification
   - Personalized year narrative
+  - *Gracefully skipped if Ollama is unreachable*
 
 - **🎨 Beautiful Reports**
   - Dark theme with year-specific accent colors
   - Responsive design for all devices
   - Standalone HTML files (no server required)
   - Top posts by engagement
+  - Local avatar download
 
 - **🔐 Privacy-First**
   - Uses authenticated `toot` CLI (your data stays local)
@@ -33,9 +37,7 @@ Generate beautiful, Spotify Wrapped-style year-in-review reports for your GoToSo
 
 ## 📋 Prerequisites
 
-### Required
-
-1. **toot CLI** - Mastodon/GoToSocial command-line client
+1. **toot CLI** - Mastodon command-line client
    ```bash
    # Install via Homebrew (macOS)
    brew install toot
@@ -53,147 +55,90 @@ Generate beautiful, Spotify Wrapped-style year-in-review reports for your GoToSo
    sudo apt install jq
    ```
 
-3. **curl** - HTTP client (usually pre-installed)
+3. **curl** & **bc** - Usually pre-installed on macOS/Linux
+
+4. **Authenticated toot session**
    ```bash
-   curl --version
+   toot login    # Login to your instance
+   toot auth     # Verify authentication
    ```
 
-4. **bc** - Calculator (usually pre-installed)
-   ```bash
-   bc --version
-   ```
-
-5. **Authenticated toot session**
-   ```bash
-   # Login to your instance
-   toot login
-   
-   # Verify authentication
-   toot auth
-   ```
-
-### Optional (for AI Insights)
-
-6. **Ollama** server with a language model
-   - Default endpoint: `http://100.72.252.38:8080`
-   - Recommended models: `phi4:14b`, `llama3.1:latest`, `deepseek-r1:32b`
+5. **Ollama** (optional, for AI insights)
+   - Any Ollama server with a language model
+   - Recommended models: `phi4:14b`, `llama3.1:latest`
+   - If unavailable, AI section is simply omitted
 
 ## 🚀 Quick Start
 
-### 1. Clone or Navigate to the Project
+### 1. Configure (Optional)
 
+Edit `.env` if you want to customize settings:
 ```bash
-cd /path/to/wrapped-gotosocial
+# Default year (can be overridden via command line)
+DEFAULT_YEAR=2025
+
+# Ollama AI Configuration (optional)
+OLLAMA_BASE_URL="http://localhost:11434"
+OLLAMA_MODEL="phi4:14b"
 ```
 
-### 2. Fetch Your Posts
+**Note:** Account is auto-detected from your active `toot` session!
+
+### 2. Run
 
 ```bash
-# Fetch posts for a specific year
-./fetch_statuses.sh 2024
+# Generate wrapped report for current year
+./wrapped.sh
 
-# Or use the default (current year)
-./fetch_statuses.sh
+# Generate for a specific year
+./wrapped.sh 2024
+
+# For a different account (overrides active toot session)
+./wrapped.sh 2024 user@instance.social
+
+# Skip AI analysis (faster)
+./wrapped.sh 2024 --skip-ai
+
+# Only fetch data, don't generate report
+./wrapped.sh 2024 --fetch-only
+
+# Use existing data, don't re-fetch
+./wrapped.sh 2024 --no-fetch
 ```
 
-This creates `statuses_YEAR.json` with all your posts for that year.
-
-### 3. Generate the Wrapped Report
+### 3. View
 
 ```bash
-# Generate report with AI analysis
-./generate_wrapped.sh 2024
-
-# Generate without AI (faster)
-./generate_wrapped.sh 2024 --skip-ai
-```
-
-### 4. View Your Report
-
-```bash
-# Open in browser (macOS)
-open wrapped_2024_anant.html
-
-# Or on Linux
-xdg-open wrapped_2024_anant.html
+open wrapped_2024_user_instance.social.html
 ```
 
 ## 📁 Project Structure
 
 ```
-wrapped-gotosocial/
-├── fetch_statuses.sh      # Fetches posts from GoToSocial via toot CLI
-├── generate_wrapped.sh    # Analyzes data and generates HTML report (pure shell)
-├── index.html             # Landing page linking all year reports
-├── statuses_YEAR.json     # Raw post data (generated)
-├── wrapped_YEAR_USER.html # Generated wrapped reports
-└── README.md              # This file
+fediverse-wrapped/
+├── wrapped.sh             # Main script (fetch + generate)
+├── template.html          # HTML template with placeholders
+├── .env                   # Configuration file
+├── avatars/               # Downloaded profile pictures
+├── index.html             # Landing page linking all reports
+├── statuses_YEAR_*.json   # Fetched post data (generated)
+├── wrapped_YEAR_*.html    # Generated reports
+└── README.md
 ```
-
-## 🛠️ Usage
-
-### Fetch Statuses Script
-
-```bash
-./fetch_statuses.sh [YEAR]
-```
-
-| Argument | Description | Default |
-|----------|-------------|---------|
-| `YEAR` | The year to fetch posts for | `2025` |
-
-**Examples:**
-```bash
-./fetch_statuses.sh 2024    # Fetch 2024 posts
-./fetch_statuses.sh 2023    # Fetch 2023 posts
-./fetch_statuses.sh         # Fetch current year (2025)
-```
-
-**Output:** `statuses_YEAR.json`
-
-### Generate Wrapped Script
-
-```bash
-./generate_wrapped.sh [YEAR] [OPTIONS]
-```
-
-| Argument | Description | Default |
-|----------|-------------|---------|
-| `YEAR` | The year to generate report for | `2025` |
-| `--skip-ai` | Skip AI analysis (faster) | AI enabled |
-
-**Examples:**
-```bash
-./generate_wrapped.sh 2024           # With AI analysis
-./generate_wrapped.sh 2024 --skip-ai # Without AI
-./generate_wrapped.sh                # Default year with AI
-```
-
-**Output:** `wrapped_YEAR_USERNAME.html`
 
 ## ⚙️ Configuration
 
-All configurable parameters are at the top of each script for easy customization.
+All settings are in `.env`:
 
-### Changing the Account
-
-Edit `fetch_statuses.sh` line 5:
 ```bash
-ACCOUNT="your_username@your.instance"
-```
-
-### Generate Script Configuration
-
-Edit `generate_wrapped.sh` top section:
-```bash
-# Ollama Configuration
-OLLAMA_BASE_URL="http://your-ollama-server:11434"
-OLLAMA_MODEL="phi4:14b"           # AI model to use
-OLLAMA_MAX_TOKENS=2500            # Max response length
-OLLAMA_TEMPERATURE=0.7            # Creativity (0.0-1.0)
-
 # Default year (can be overridden via command line)
 DEFAULT_YEAR=2025
+
+# Ollama AI Configuration (optional - skipped if unreachable)
+OLLAMA_BASE_URL="http://localhost:11434"
+OLLAMA_MODEL="phi4:14b"
+OLLAMA_MAX_TOKENS=2500
+OLLAMA_TEMPERATURE=0.7
 
 # Number of posts to sample for AI analysis
 AI_SAMPLE_SIZE=50
@@ -201,7 +146,7 @@ AI_SAMPLE_SIZE=50
 
 ### Customizing Year Theme Colors
 
-Edit the `get_year_colors()` function in `generate_wrapped.sh`:
+Edit the `get_year_colors()` function in `wrapped.sh`:
 ```bash
 get_year_colors() {
     case "$1" in
@@ -214,20 +159,31 @@ get_year_colors() {
 }
 ```
 
-### Supported Ollama Models
+## 🛠️ Usage
 
-Any instruction-following model works. Tested with:
-- `phi4:14b` (recommended - good balance)
-- `llama3.1:latest`
-- `deepseek-r1:32b` (best quality, slower)
-- `phi3.5:latest` (faster, smaller)
+```bash
+./wrapped.sh [YEAR] [ACCOUNT] [OPTIONS]
+```
+
+| Argument | Description |
+|----------|-------------|
+| `YEAR` | Year to generate report for (default: from .env) |
+| `ACCOUNT` | Full handle like `user@instance` (default: active toot session) |
+| `--skip-ai` | Skip AI analysis (faster) |
+| `--fetch-only` | Only fetch statuses, don't generate report |
+| `--no-fetch` | Skip fetching, use existing data file |
+
+**Examples:**
+```bash
+./wrapped.sh                       # Current year, active account
+./wrapped.sh 2024                  # Specific year
+./wrapped.sh 2024 me@mastodon.social  # Different account
+./wrapped.sh 2024 --skip-ai        # Without AI (faster)
+./wrapped.sh 2024 --fetch-only     # Just download data
+./wrapped.sh 2024 --no-fetch       # Regenerate from cached data
+```
 
 ## 📊 Report Sections
-
-### Statistics Card
-- Total posts, original posts, boosts, replies
-- Longest posting streak
-- Average words per post
 
 ### Social Impact Score
 Calculated as: `(reblogs × 2) + favorites + (posts × 0.1) + (streak × 5)`
@@ -242,83 +198,60 @@ Calculated as: `(reblogs × 2) + favorites + (posts × 0.1) + (streak × 5)`
 | <100 | 🌱 Growing |
 
 ### Persona Classification
-Based on posting behavior:
 - **📢 The Broadcaster** - >60% original content
 - **🎯 The Curator** - >60% boosts
 - **💬 The Socialite** - >50% replies
 - **⚖️ The Balancer** - Mixed posting style
 
 ### Chronotype Analysis
-Based on posting hours:
 - **🦉 Night Owl** - >15% posts between 0-5am
 - **🐦 Early Bird** - >30% posts between 5-10am
 - **😏 Slacker** - >60% posts during work hours
 - **☀️ The Regular** - Balanced schedule
 
-### AI Insights (when enabled)
-- Emotional journey and mood analysis
-- Personality traits detection
-- Writing style characterization
-- Interest areas and passion topics
-- Personalized year narrative
-- Fun facts about posting behavior
+## 📝 Generate All Years
 
-## 🎨 Year Themes
+```bash
+for year in 2022 2023 2024 2025; do
+  ./wrapped.sh $year
+done
 
-Each year has a unique color scheme:
-- **2025** - Purple (`#8b5cf6`)
-- **2024** - Amber (`#f59e0b`)
-- **2023** - Teal (`#14b8a6`)
-- **2022** - Pink (`#ec4899`)
+open index.html
+```
 
 ## 🔧 Troubleshooting
 
-### "toot: command not found"
+### "No account specified and no active toot session"
 ```bash
-# Install toot
-brew install toot  # or pip install toot
-
-# Login to your instance
-toot login
+toot login       # Login to your instance
+toot auth        # Verify authentication shows ACTIVE
 ```
 
 ### "No statuses found for YEAR"
 - Ensure you have posts for that year
-- Check if your account is correct in `fetch_statuses.sh`
 - Verify authentication: `toot auth`
 
-### AI analysis returns fallback values
-- Check if Ollama server is running
-- Verify the endpoint in `generate_wrapped.sh`
-- Try a different model: change `OLLAMA_MODEL`
+### AI section not appearing
+- This is normal if Ollama is unreachable
+- Check if Ollama server is running: `curl http://localhost:11434/api/tags`
+- Verify `OLLAMA_BASE_URL` in `.env`
 
-### "bc: command not found" or math errors
-- Install bc: `brew install bc` (macOS) or `apt install bc` (Linux)
-
-### "Argument list too long" error
-The fetch script handles large datasets automatically. If you still see this error, ensure `jq` is up to date.
-
-## 📝 Generate All Years
-
+### "jq: command not found"
 ```bash
-# Fetch all years
-for year in 2022 2023 2024 2025; do
-  ./fetch_statuses.sh $year
-done
+brew install jq  # macOS
+apt install jq   # Linux
+```
 
-# Generate all reports
-for year in 2022 2023 2024 2025; do
-  ./generate_wrapped.sh $year
-done
-
-# Open index page
-open index.html
+### "bc: command not found"
+```bash
+brew install bc  # macOS
+apt install bc   # Linux
 ```
 
 ## 🤝 Credits
 
 - Inspired by [Mastodon Wrapped](https://github.com/Eyozy/mastodon-wrapped)
-- Built for [GoToSocial](https://gotosocial.org/) and the Fediverse
+- Built for the Fediverse
 - AI analysis powered by [Ollama](https://ollama.ai/)
 - CLI access via [toot](https://github.com/ihabunek/toot)
 
@@ -329,4 +262,3 @@ MIT License - Feel free to modify and share!
 ---
 
 Made with 💜 for the Fediverse
-

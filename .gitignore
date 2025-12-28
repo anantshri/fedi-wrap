@@ -1,1 +1,7 @@
+.env
+plan.md
 projects
+*.json
+wrapped_*.html
+index.html
+avatars
