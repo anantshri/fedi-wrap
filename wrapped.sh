@@ -4,7 +4,7 @@
 # Fetches posts and generates a beautiful HTML year-in-review report
 # Works with any Mastodon-compatible server (Mastodon, GoToSocial, Pleroma, etc.)
 #
-# Usage: ./wrapped.sh [year] [account@instance] [--skip-ai] [--fetch-only] [--no-fetch]
+# Usage: ./wrapped.sh [year] [account@instance] [--skip-ai] [--fetch-only] [--no-fetch] [-o output.html]
 #
 
 set -e
@@ -64,7 +64,12 @@ check_dependencies
 # Defaults
 DEFAULT_YEAR="${DEFAULT_YEAR:-2025}"
 OLLAMA_BASE_URL="${OLLAMA_BASE_URL:-http://localhost:11434}"
-OLLAMA_MODEL="${OLLAMA_MODEL:-llama3.1:latest}"
+# Recommended models (tested and ranked):
+#   - phi4:latest         (best balance of quality & speed) ← DEFAULT
+#   - deepseek-r1:32b     (great reasoning, slower)
+#   - gemma3:27b          (good quality, moderate speed)
+#   - qwen3:8b            (fast, decent quality)
+OLLAMA_MODEL="${OLLAMA_MODEL:-phi4:latest}"
 AI_CHUNK_SIZE="${AI_CHUNK_SIZE:-50}"
 
 # Parse arguments
@@ -73,19 +78,29 @@ ACCOUNT=""
 SKIP_AI=false
 FETCH_ONLY=false
 NO_FETCH=false
+CUSTOM_OUTPUT=""
 
-for arg in "$@"; do
-    case $arg in
-        --skip-ai) SKIP_AI=true ;;
-        --fetch-only) FETCH_ONLY=true ;;
-        --no-fetch) NO_FETCH=true ;;
-        [0-9][0-9][0-9][0-9]) YEAR="$arg" ;;
-        *@*) ACCOUNT="$arg" ;;  # Matches user@instance format
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --skip-ai) SKIP_AI=true; shift ;;
+        --fetch-only) FETCH_ONLY=true; shift ;;
+        --no-fetch) NO_FETCH=true; shift ;;
+        -o|--output) CUSTOM_OUTPUT="$2"; shift 2 ;;
+        [0-9][0-9][0-9][0-9]) YEAR="$1"; shift ;;
+        *@*) ACCOUNT="$1"; shift ;;  # Matches user@instance format
+        *) shift ;;
     esac
 done
 
 # Get account from toot if not specified
 if [ -z "$ACCOUNT" ]; then
+    if ! command -v toot >/dev/null 2>&1; then
+        echo "❌ No account specified and 'toot' CLI not installed."
+        echo "   Either:"
+        echo "   • Install toot: pip install toot"
+        echo "   • Specify account manually: ./wrapped.sh 2024 user@instance"
+        exit 1
+    fi
     ACCOUNT=$(toot auth 2>/dev/null | grep "ACTIVE" | awk '{print $2}' | head -1)
     if [ -z "$ACCOUNT" ]; then
         echo "❌ No account specified and no active toot session found."
@@ -141,6 +156,16 @@ hex_to_rgba() {
 # ============================================
 
 fetch_statuses() {
+    # Check toot is available for fetching
+    if ! command -v toot >/dev/null 2>&1; then
+        echo "❌ 'toot' CLI is required for fetching statuses but not installed."
+        echo "   Install via: pip install toot"
+        echo "   Then login: toot login"
+        echo ""
+        echo "   Alternatively, use --no-fetch with an existing data file."
+        exit 1
+    fi
+    
     local TEMP="$SCRIPT_DIR/.temp_${YEAR}.json"
     echo "[]" > "$TEMP"
     
@@ -210,6 +235,13 @@ generate_report() {
     local ACCT_USER=$(jq -r '.account.username // "user"' "$DATA_FILE")
     local ACCT_AVATAR_URL=$(jq -r '.account.avatar // ""' "$DATA_FILE")
     local ACCT_URL=$(jq -r '.account.url // ""' "$DATA_FILE")
+    local ACCT_CREATED_RAW=$(jq -r '.account.created_at // ""' "$DATA_FILE")
+    local ACCT_CREATED=""
+    if [ -n "$ACCT_CREATED_RAW" ]; then
+        ACCT_CREATED=$(date -j -f "%Y-%m-%dT%H:%M:%S" "${ACCT_CREATED_RAW%%.*}" "+%b %Y" 2>/dev/null || \
+                       date -d "${ACCT_CREATED_RAW}" "+%b %Y" 2>/dev/null || \
+                       echo "${ACCT_CREATED_RAW:0:7}")
+    fi
     
     # Use full handle (user@instance)
     local ACCT_HANDLE="$ACCOUNT"
@@ -228,7 +260,11 @@ generate_report() {
     fi
     [ ! -f "$AVATAR_PATH" ] && ACCT_AVATAR="$ACCT_AVATAR_URL"
     
-    OUTPUT_FILE="$SCRIPT_DIR/wrapped_${YEAR}_${ACCOUNT//@/_}.html"
+    if [ -n "$CUSTOM_OUTPUT" ]; then
+        OUTPUT_FILE="$CUSTOM_OUTPUT"
+    else
+        OUTPUT_FILE="$SCRIPT_DIR/wrapped_${YEAR}_${ACCOUNT//@/_}.html"
+    fi
     
     echo "📊 Analyzing..."
     
@@ -526,7 +562,7 @@ PYEOF
     if [ "$SKIP_AI" = false ]; then
         echo "🤖 Checking AI..."
         if curl -s --connect-timeout 3 "$OLLAMA_BASE_URL/api/tags" >/dev/null 2>&1; then
-            echo "   AI available, analyzing all posts in chunks..."
+            echo "   AI available, analyzing posts with multi-pass approach..."
             
             # Get all original posts
             local ALL_POSTS=$(jq --arg y "$YEAR" '
@@ -539,7 +575,12 @@ PYEOF
             
             echo "   Processing $TOTAL_POSTS posts in $CHUNKS chunk(s)..."
             
-            local CHUNK_ANALYSES=""
+            # Collect results from multiple focused passes
+            local ALL_THEMES=""
+            local ALL_EMOTIONS=""
+            local ALL_TRAITS=""
+            local ALL_QUIRKS=""
+            
             local chunk=0
             local TEMP_REQ="$SCRIPT_DIR/.ai_request.json"
             
@@ -550,92 +591,209 @@ PYEOF
                 
                 echo "   Chunk $((chunk + 1))/$CHUNKS (posts $((start + 1))-$end_idx)..."
                 
-                # Build prompt and request via temp file to handle escaping
                 local CHUNK_POSTS=$(echo "$ALL_POSTS" | jq -r --argjson s "$start" --argjson n "$AI_CHUNK_SIZE" '.[$s:$s+$n] | join("\n---\n")')
                 
+                # === PASS 1: Topics & Themes (focused, short prompt) ===
+                echo "      → Analyzing topics..."
                 jq -n --arg m "$OLLAMA_MODEL" --arg posts "$CHUNK_POSTS" '{
                     model: $m,
-                    prompt: ("Analyze these Fediverse posts. Return ONLY valid JSON:\n{\"themes\":[\"t1\",\"t2\"],\"mood\":\"word\",\"topics\":[\"t1\",\"t2\"],\"traits\":[\"t1\"],\"style\":\"brief\"}\n\nPosts:\n" + $posts),
+                    prompt: ("List the main TOPICS in these posts. Look for:\n- Technical: security, infosec, pentesting, CTF, software supply chain, SBOM, DevSecOps\n- AI/LLM: artificial intelligence, ChatGPT, prompts, LLM criticism or praise\n- Development: coding, tools, open source, GitHub, programming\n- Community: meetups, conferences, teaching, mentoring\n- Philosophy: tech industry criticism, career advice, reflections\n- Personal: hobbies, photos, daily life\n\nReturn ONLY a JSON array of specific topics found (not categories).\nExample: [\"software supply chain security\",\"LLM skepticism\",\"small meetups\"]\n\nPosts:\n" + $posts),
                     stream: false
                 }' > "$TEMP_REQ"
                 
-                local CHUNK_RESP=$(curl -s --max-time 120 "$OLLAMA_BASE_URL/api/generate" \
+                local THEMES_RESP=$(curl -s --max-time 60 "$OLLAMA_BASE_URL/api/generate" \
                     -d @"$TEMP_REQ" 2>/dev/null | jq -r '.response // empty')
+                local THEMES_JSON=$(extract_json "$THEMES_RESP")
+                [ -n "$THEMES_JSON" ] && ALL_THEMES="${ALL_THEMES}${THEMES_JSON}\n"
                 
-                if [ -n "$CHUNK_RESP" ]; then
-                    local CLEAN_RESP=$(extract_json "$CHUNK_RESP")
-                    if [ -n "$CLEAN_RESP" ] && echo "$CLEAN_RESP" | jq . >/dev/null 2>&1; then
-                        # Compact JSON to single line for storage
-                        local COMPACT_JSON=$(echo "$CLEAN_RESP" | jq -c .)
-                        CHUNK_ANALYSES="${CHUNK_ANALYSES}Chunk $((chunk+1)): ${COMPACT_JSON}\n"
-                        echo "      ✓ Got analysis"
-                    else
-                        echo "      ✗ Invalid JSON"
-                        # Debug: save failed response for inspection
-                        echo "$CHUNK_RESP" > "$SCRIPT_DIR/.failed_chunk_${chunk}.txt" 2>/dev/null || true
-                    fi
-                else
-                    echo "      ✗ No response"
-                fi
+                # === PASS 2: Emotional Tone (focused, short prompt) ===
+                echo "      → Analyzing tone..."
+                jq -n --arg m "$OLLAMA_MODEL" --arg posts "$CHUNK_POSTS" '{
+                    model: $m,
+                    prompt: ("What is the emotional TONE of these posts?\n\nPossible tones:\n- Skeptically curious (questions things but wants to understand)\n- Critically analytical (examines issues deeply)\n- Passionately contrarian (challenges mainstream views)\n- Reflectively philosophical (thinks about deeper meanings)\n- Pragmatically grounded (focuses on what works)\n- Frustrated with industry (critical of tech trends)\n- Enthusiastically building (excited about creating)\n\nReturn ONLY JSON: {\"tone\":\"two-word description\",\"evidence\":\"brief quote or reason\"}\n\nPosts:\n" + $posts),
+                    stream: false
+                }' > "$TEMP_REQ"
                 
+                local EMO_RESP=$(curl -s --max-time 60 "$OLLAMA_BASE_URL/api/generate" \
+                    -d @"$TEMP_REQ" 2>/dev/null | jq -r '.response // empty')
+                local EMO_JSON=$(extract_json "$EMO_RESP")
+                [ -n "$EMO_JSON" ] && ALL_EMOTIONS="${ALL_EMOTIONS}${EMO_JSON}\n"
+                
+                # === PASS 3: Personality Traits (focused, short prompt) ===
+                echo "      → Analyzing traits..."
+                jq -n --arg m "$OLLAMA_MODEL" --arg posts "$CHUNK_POSTS" '{
+                    model: $m,
+                    prompt: ("What specific PERSONALITY TRAITS does this author show? Look for:\n- Technical: fundamentals-first, tool-agnostic, protocol-level thinking\n- Mindset: skeptical of hype, questions before following, depth over breadth\n- Role: educator, builder, open-source contributor, security researcher\n- Style: analytical, philosophical, practical, contrarian\n- Values: authenticity, community quality over quantity, self-hosting\n\nReturn ONLY JSON array of SPECIFIC traits found:\n[\"fundamentals-first mentality\",\"skeptical of AI hype\",\"open source advocate\"]\n\nPosts:\n" + $posts),
+                    stream: false
+                }' > "$TEMP_REQ"
+                
+                local TRAITS_RESP=$(curl -s --max-time 60 "$OLLAMA_BASE_URL/api/generate" \
+                    -d @"$TEMP_REQ" 2>/dev/null | jq -r '.response // empty')
+                local TRAITS_JSON=$(extract_json "$TRAITS_RESP")
+                [ -n "$TRAITS_JSON" ] && ALL_TRAITS="${ALL_TRAITS}${TRAITS_JSON}\n"
+                
+                # === PASS 4: Quirks & Fun Facts (focused, short prompt) ===
+                echo "      → Finding quirks..."
+                jq -n --arg m "$OLLAMA_MODEL" --arg posts "$CHUNK_POSTS" '{
+                    model: $m,
+                    prompt: ("Find QUIRKY or INTERESTING details from these posts. Look for:\n- Unusual sleep/work patterns (night owl? early bird?)\n- Strong opinions stated memorably\n- Personal anecdotes or stories\n- Contradictions that are funny\n- Tool preferences or pet peeves\n- Unexpected hobbies or interests\n\nQuote or paraphrase the actual content when possible.\n\nReturn ONLY JSON: {\"quirks\":[\"specific observation from posts\"]}\n\nPosts:\n" + $posts),
+                    stream: false
+                }' > "$TEMP_REQ"
+                
+                local QUIRKS_RESP=$(curl -s --max-time 60 "$OLLAMA_BASE_URL/api/generate" \
+                    -d @"$TEMP_REQ" 2>/dev/null | jq -r '.response // empty')
+                local QUIRKS_JSON=$(extract_json "$QUIRKS_RESP")
+                [ -n "$QUIRKS_JSON" ] && ALL_QUIRKS="${ALL_QUIRKS}${QUIRKS_JSON}\n"
+                
+                echo "      ✓ Chunk complete"
                 chunk=$((chunk + 1))
             done
             
             rm -f "$TEMP_REQ"
             
-            # Synthesize all chunk analyses
-            if [ -n "$CHUNK_ANALYSES" ]; then
-                echo "   Synthesizing insights from all chunks..."
+            # === SYNTHESIS: Combine all focused analyses ===
+            if [ -n "$ALL_THEMES" ] || [ -n "$ALL_EMOTIONS" ]; then
+                echo "   Synthesizing final insights (3 focused steps)..."
                 
-                jq -n --arg m "$OLLAMA_MODEL" --arg analyses "$CHUNK_ANALYSES" --arg total "$TOTAL_POSTS" --arg year "$YEAR" '{
+                # Step 1: Get mood and persona
+                echo "      → Creating persona..."
+                jq -n --arg m "$OLLAMA_MODEL" --arg themes "$ALL_THEMES" --arg emotions "$ALL_EMOTIONS" --arg traits "$ALL_TRAITS" --arg name "$ACCT_NAME" '{
                     model: $m,
-                    prompt: ("You analyzed " + $total + " Fediverse posts from " + $year + " in chunks. Here are the analyses:\n\n" + $analyses + "\n\nSynthesize into FINAL analysis. Return ONLY valid JSON:\n{\"mood\":\"one word\",\"mood_desc\":\"2 sentences\",\"persona\":\"creative title\",\"persona_desc\":\"2 sentences\",\"traits\":[\"t1\",\"t2\",\"t3\"],\"passion\":\"main topic\",\"topics\":[\"t1\",\"t2\",\"t3\"],\"tone\":\"word\",\"style\":\"brief desc\",\"narrative\":\"3 sentences about their year\",\"fun_fact\":\"observation\"}"),
+                    prompt: ("Create a persona for " + $name + " based on their social media analysis.\n\nTopics: " + $themes + "\nEmotional tones: " + $emotions + "\nTraits: " + $traits + "\n\nIMPORTANT: Use the name \"" + $name + "\" - do NOT invent a different name.\n\nReturn ONLY JSON:\n{\"mood\":\"Two-Word Vibe\",\"mood_desc\":\"One sentence about " + $name + "\",\"persona\":\"The Creative Title\",\"persona_desc\":\"One sentence describing " + $name + "\"}"),
                     stream: false
                 }' > "$SCRIPT_DIR/.ai_synth.json"
                 
-                local AI_RESP=$(curl -s --max-time 120 "$OLLAMA_BASE_URL/api/generate" \
+                local PERSONA_RESP=$(curl -s --max-time 180 "$OLLAMA_BASE_URL/api/generate" \
                     -d @"$SCRIPT_DIR/.ai_synth.json" 2>/dev/null | jq -r '.response // empty')
+                local PERSONA_JSON=$(extract_json "$PERSONA_RESP")
+                
+                # Step 2: Get narrative
+                echo "      → Writing narrative..."
+                jq -n --arg m "$OLLAMA_MODEL" --arg themes "$ALL_THEMES" --arg year "$YEAR" --arg total "$TOTAL_POSTS" --arg name "$ACCT_NAME" '{
+                    model: $m,
+                    prompt: ("Write a 2-3 sentence narrative about " + $name + "'"'"'s " + $year + " based on their " + $total + " posts.\n\nTopics discussed: " + $themes + "\n\nIMPORTANT: Use ONLY the name \"" + $name + "\" - never invent a different name.\nStart with: \"In " + $year + ", " + $name + "...\"\nBe specific about their actual interests.\n\nReturn ONLY JSON: {\"narrative\":\"The 2-3 sentence story...\"}"),
+                    stream: false
+                }' > "$SCRIPT_DIR/.ai_synth.json"
+                
+                local NARR_RESP=$(curl -s --max-time 180 "$OLLAMA_BASE_URL/api/generate" \
+                    -d @"$SCRIPT_DIR/.ai_synth.json" 2>/dev/null | jq -r '.response // empty')
+                local NARR_JSON=$(extract_json "$NARR_RESP")
+                
+                # Step 3: Pick fun fact and finalize traits
+                echo "      → Selecting highlights..."
+                jq -n --arg m "$OLLAMA_MODEL" --arg quirks "$ALL_QUIRKS" --arg traits "$ALL_TRAITS" --arg themes "$ALL_THEMES" '{
+                    model: $m,
+                    prompt: ("Select the BEST and most SPECIFIC items from this data.\n\nQuirks found: " + $quirks + "\nTraits found: " + $traits + "\nTopics: " + $themes + "\n\nRules:\n- Pick traits that are SPECIFIC, not generic (\"fundamentals-first\" not \"knowledgeable\")\n- Pick topics that are TECHNICAL when present (\"software supply chain\" not just \"security\")\n- Pick the most MEMORABLE quirk that shows personality\n- Prioritize items that appear multiple times\n\nReturn ONLY JSON:\n{\"traits\":[\"specific trait 1\",\"specific trait 2\",\"specific trait 3\"],\"passion\":\"most discussed technical topic\",\"topics\":[\"topic1\",\"topic2\",\"topic3\"],\"fun_fact\":\"most memorable quirk with detail\",\"tone\":\"writing style\",\"style\":\"how they write - be specific\"}"),
+                    stream: false
+                }' > "$SCRIPT_DIR/.ai_synth.json"
+                
+                local FINAL_RESP=$(curl -s --max-time 180 "$OLLAMA_BASE_URL/api/generate" \
+                    -d @"$SCRIPT_DIR/.ai_synth.json" 2>/dev/null | jq -r '.response // empty')
+                local FINAL_JSON=$(extract_json "$FINAL_RESP")
                 
                 rm -f "$SCRIPT_DIR/.ai_synth.json"
                 
-                if [ -n "$AI_RESP" ]; then
-                    local AI_JSON=$(extract_json "$AI_RESP")
+                # Merge all JSON results
+                local AI_JSON=$(echo "$PERSONA_JSON $NARR_JSON $FINAL_JSON" | jq -s 'add // {}')
+                
+                if [ -n "$AI_JSON" ] && echo "$AI_JSON" | jq . >/dev/null 2>&1; then
+                    local AI_MOOD=$(echo "$AI_JSON" | jq -r '.mood // "Engaged"')
+                    local AI_MOOD_D=$(echo "$AI_JSON" | jq -r '.mood_desc // ""')
+                    local AI_PERS=$(echo "$AI_JSON" | jq -r '.persona // "Active"')
+                    local AI_PERS_D=$(echo "$AI_JSON" | jq -r '.persona_desc // ""')
+                    local AI_TONE=$(echo "$AI_JSON" | jq -r '.tone // "Conversational"')
+                    local AI_STYLE=$(echo "$AI_JSON" | jq -r '.style // ""')
+                    local AI_PASSION=$(echo "$AI_JSON" | jq -r '.passion // "Various"')
+                    local AI_NARR=$(echo "$AI_JSON" | jq -r '.narrative // ""')
+                    local AI_FUN=$(echo "$AI_JSON" | jq -r '.fun_fact // ""')
                     
-                    if [ -n "$AI_JSON" ] && echo "$AI_JSON" | jq . >/dev/null 2>&1; then
-                        local AI_MOOD=$(echo "$AI_JSON" | jq -r '.mood // "Engaged"')
-                        local AI_MOOD_D=$(echo "$AI_JSON" | jq -r '.mood_desc // ""')
-                        local AI_PERS=$(echo "$AI_JSON" | jq -r '.persona // "Active"')
-                        local AI_PERS_D=$(echo "$AI_JSON" | jq -r '.persona_desc // ""')
-                        local AI_TRAITS=$(echo "$AI_JSON" | jq -r '.traits[:5] | map("<span class=\"trait-tag\">\(.)</span>") | join("")')
-                        local AI_TONE=$(echo "$AI_JSON" | jq -r '.tone // "Conversational"')
-                        local AI_STYLE=$(echo "$AI_JSON" | jq -r '.style // ""')
-                        local AI_PASSION=$(echo "$AI_JSON" | jq -r '.passion // "Various"')
-                        local AI_TOPICS=$(echo "$AI_JSON" | jq -r '.topics[:4] | map("<span class=\"trait-tag\">\(.)</span>") | join("")')
-                        local AI_NARR=$(echo "$AI_JSON" | jq -r '.narrative // ""')
-                        local AI_FUN=$(echo "$AI_JSON" | jq -r '.fun_fact // ""')
-                        
-                        echo "   ✓ Mood: $AI_MOOD, Persona: $AI_PERS"
-                        
-                        AI_SECTION="<section class=\"ai-insights\">
-<h2>🤖 AI-Powered Insights</h2>
-<p style=\"color:var(--text-muted);font-size:0.85rem;margin-bottom:1rem;\">Based on analysis of all $TOTAL_POSTS original posts</p>
-<div class=\"narrative\">\"$AI_NARR\"</div>
-<div class=\"ai-grid\">
-<div class=\"ai-card\"><div class=\"ai-card-title\">Emotional Vibe</div><div class=\"ai-card-value\">$AI_MOOD</div><div class=\"ai-card-desc\">$AI_MOOD_D</div></div>
-<div class=\"ai-card\"><div class=\"ai-card-title\">AI Persona</div><div class=\"ai-card-value\">$AI_PERS</div><div class=\"ai-card-desc\">$AI_PERS_D</div><div class=\"trait-list\">$AI_TRAITS</div></div>
-<div class=\"ai-card\"><div class=\"ai-card-title\">Writing Style</div><div class=\"ai-card-value\">$AI_TONE</div><div class=\"ai-card-desc\">$AI_STYLE</div></div>
-<div class=\"ai-card\"><div class=\"ai-card-title\">Passion Topic</div><div class=\"ai-card-value\">$AI_PASSION</div><div class=\"trait-list\">$AI_TOPICS</div></div>
+                    echo "   ✓ Mood: $AI_MOOD, Persona: $AI_PERS"
+                    
+                    # Build traits HTML with proper tags
+                    local TRAITS_HTML=""
+                    local trait_list=$(echo "$AI_JSON" | jq -r '(.traits // [])[:6] | .[]' 2>/dev/null)
+                    while IFS= read -r trait; do
+                        [ -n "$trait" ] && TRAITS_HTML="$TRAITS_HTML<span class=\"trait-tag\">$trait</span>"
+                    done <<< "$trait_list"
+                    
+                    # Build topics word cloud HTML  
+                    local TOPICS_HTML=""
+                    local topic_list=$(echo "$AI_JSON" | jq -r '(.topics // [])[:6] | .[]' 2>/dev/null)
+                    local idx=0
+                    while IFS= read -r topic; do
+                        if [ -n "$topic" ]; then
+                            case $idx in
+                                0) size="1.8rem"; color="var(--accent-cyan)" ;;
+                                1) size="1.5rem"; color="var(--accent-purple)" ;;
+                                2) size="1.3rem"; color="var(--accent-orange)" ;;
+                                3) size="1.2rem"; color="var(--accent-green)" ;;
+                                4) size="1.1rem"; color="var(--accent-pink)" ;;
+                                *) size="1rem"; color="var(--text-secondary)" ;;
+                            esac
+                            TOPICS_HTML="$TOPICS_HTML<span class=\"word\" style=\"--word-size: $size; --word-color: $color;\">$topic</span>"
+                            idx=$((idx + 1))
+                        fi
+                    done <<< "$topic_list"
+                    
+                    AI_SECTION="<!-- AI-Powered Insights -->
+<section class=\"narrative-section\">
+<p class=\"narrative-text\">$AI_NARR</p>
+</section>
+
+<section class=\"persona-card\">
+<div class=\"persona-item\">
+<div class=\"persona-label\">AI Persona</div>
+<div class=\"persona-value\">$AI_PERS</div>
+<p class=\"persona-desc\">$AI_PERS_D</p>
 </div>
-<div class=\"fun-fact\"><span class=\"fun-fact-icon\">💡</span><span class=\"fun-fact-text\">$AI_FUN</span></div>
+<div class=\"persona-item\">
+<div class=\"persona-label\">Emotional Vibe</div>
+<div class=\"persona-value\">$AI_MOOD</div>
+<p class=\"persona-desc\">$AI_MOOD_D</p>
+</div>
+<div class=\"persona-item\">
+<div class=\"persona-label\">Writing Style</div>
+<div class=\"persona-value\">$AI_TONE</div>
+<p class=\"persona-desc\">$AI_STYLE</p>
+</div>
+<div class=\"persona-item\">
+<div class=\"persona-label\">Core Passion</div>
+<div class=\"persona-value\">$AI_PASSION</div>
+<p class=\"persona-desc\">The driving theme across posts and discussions.</p>
+</div>
+</section>
+
+<section class=\"traits-container\">
+<div class=\"section-header\">
+<div class=\"section-icon\">🏷️</div>
+<h2>Defining Traits</h2>
+</div>
+<div class=\"traits-grid\">$TRAITS_HTML</div>
+</section>
+
+<section class=\"word-cloud\">
+<div class=\"section-header\" style=\"justify-content: center;\">
+<div class=\"section-icon\">☁️</div>
+<h2>Theme Cloud</h2>
+</div>
+<div class=\"word-cloud-inner\">$TOPICS_HTML</div>
+</section>
+
+<section class=\"fun-facts\">
+<div class=\"section-header\">
+<div class=\"section-icon\">🎯</div>
+<h2>Fun Facts & Quirks</h2>
+</div>
+<div class=\"fun-fact-item\">
+<span class=\"fun-fact-icon\">✨</span>
+<p class=\"fun-fact-text\">$AI_FUN</p>
+</div>
 </section>"
-                    else
-                        echo "   AI synthesis invalid, skipping"
-                    fi
                 else
-                    echo "   No synthesis response, skipping"
+                    echo "   ✗ Could not merge AI results"
                 fi
             else
-                echo "   No chunk analyses succeeded, skipping"
+                echo "   No analyses succeeded, skipping AI section"
             fi
         else
             echo "   AI not reachable, skipping"
@@ -655,6 +813,7 @@ PYEOF
         -e "s|{{ACCOUNT_ACCT}}|$ACCT_HANDLE|g" \
         -e "s|{{ACCOUNT_AVATAR}}|$ACCT_AVATAR|g" \
         -e "s|{{ACCOUNT_URL}}|$ACCT_URL|g" \
+        -e "s|{{ACCOUNT_CREATED}}|$ACCT_CREATED|g" \
         -e "s|{{TOTAL_POSTS}}|$(fmt_num $TOTAL)|g" \
         -e "s|{{ORIGINAL_POSTS}}|$(fmt_num $ORIG)|g" \
         -e "s|{{REBLOGS}}|$(fmt_num $REBLOGS)|g" \

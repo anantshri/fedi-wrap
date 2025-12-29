@@ -4,129 +4,22 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ACCOUNT_DISPLAY_NAME}} - {{YEAR}} Wrapped</title>
-    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
     <style>
+        /* Theme overrides - colors are injected per-user */
         :root {
-            --bg-primary: #0a0a0f;
-            --bg-secondary: #12121a;
-            --bg-card: #1a1a25;
-            --bg-hover: #252535;
-            --text-primary: #f0f0f5;
-            --text-secondary: #a0a0b0;
-            --text-muted: #606070;
             --accent-primary: {{PRIMARY_COLOR}};
             --accent-secondary: {{SECONDARY_COLOR}};
-            --accent-tertiary: {{PRIMARY_COLOR}}cc;
-            --accent-gold: #fbbf24;
-            --success: #22c55e;
-            --warning: #f59e0b;
-            --border: {{PRIMARY_COLOR}}33;
-            --glow: {{GLOW_COLOR}};
+            --glow-primary: {{GLOW_COLOR}};
         }
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: 'Space Grotesk', -apple-system, sans-serif; background: var(--bg-primary); color: var(--text-primary); line-height: 1.6; min-height: 100vh; }
-        .container { max-width: 1200px; margin: 0 auto; padding: 2rem; }
         
-        /* Hero */
-        .hero { text-align: center; padding: 4rem 2rem; background: linear-gradient(135deg, var(--bg-secondary) 0%, var(--bg-primary) 100%); border-radius: 24px; margin-bottom: 2rem; position: relative; overflow: hidden; }
-        .hero::before { content: ''; position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: radial-gradient(circle at 30% 20%, var(--glow) 0%, transparent 50%), radial-gradient(circle at 70% 80%, {{SECONDARY_COLOR}}33 0%, transparent 50%); pointer-events: none; }
-        .hero-content { position: relative; z-index: 1; }
-        .avatar { width: 120px; height: 120px; border-radius: 50%; border: 4px solid var(--accent-primary); margin-bottom: 1.5rem; box-shadow: 0 0 40px var(--glow); }
-        .year-badge { display: inline-block; background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary)); color: white; padding: 0.5rem 1.5rem; border-radius: 50px; font-size: 1.25rem; font-weight: 600; margin-bottom: 1rem; letter-spacing: 2px; }
-        .display-name { font-size: 2.5rem; font-weight: 700; margin-bottom: 0.5rem; background: linear-gradient(135deg, var(--text-primary), var(--accent-tertiary)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
-        .handle { color: var(--text-secondary); font-size: 1.1rem; font-family: 'JetBrains Mono', monospace; }
-        
-        /* AI Insights */
-        .ai-insights { background: linear-gradient(135deg, var(--bg-card) 0%, {{PRIMARY_COLOR}}15 100%); border-radius: 20px; padding: 2rem; margin-bottom: 2rem; border: 1px solid var(--border); }
-        .ai-insights h2 { font-size: 1.5rem; margin-bottom: 1.5rem; display: flex; align-items: center; gap: 0.5rem; }
-        .narrative { font-size: 1.2rem; line-height: 1.8; color: var(--text-primary); padding: 1.5rem; background: var(--bg-secondary); border-radius: 12px; border-left: 4px solid var(--accent-primary); margin-bottom: 1.5rem; font-style: italic; }
-        .ai-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.5rem; }
-        .ai-card { background: var(--bg-secondary); border-radius: 12px; padding: 1.5rem; }
-        .ai-card-title { font-size: 0.85rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 0.75rem; }
-        .ai-card-value { font-size: 1.25rem; font-weight: 600; color: var(--accent-primary); margin-bottom: 0.5rem; }
-        .ai-card-desc { color: var(--text-secondary); font-size: 0.9rem; line-height: 1.6; }
-        .trait-list { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.75rem; }
-        .trait-tag { background: var(--accent-primary)22; color: var(--accent-primary); padding: 0.25rem 0.75rem; border-radius: 50px; font-size: 0.85rem; }
-        .fun-fact { background: var(--accent-gold)15; border: 1px solid var(--accent-gold)33; border-radius: 12px; padding: 1rem 1.5rem; margin-top: 1.5rem; display: flex; align-items: flex-start; gap: 0.75rem; }
-        .fun-fact-icon { font-size: 1.5rem; }
-        .fun-fact-text { color: var(--text-primary); font-size: 0.95rem; }
-        
-        /* Stats */
-        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1.5rem; margin-bottom: 2rem; }
-        .stat-card { background: var(--bg-card); border-radius: 16px; padding: 1.5rem; border: 1px solid var(--border); transition: transform 0.3s, box-shadow 0.3s; }
-        .stat-card:hover { transform: translateY(-4px); box-shadow: 0 8px 30px {{PRIMARY_COLOR}}22; }
-        .stat-value { font-size: 2.25rem; font-weight: 700; color: var(--accent-primary); font-family: 'JetBrains Mono', monospace; }
-        .stat-label { color: var(--text-secondary); font-size: 0.85rem; margin-top: 0.25rem; }
-        
-        /* Impact Card */
-        .impact-card { background: linear-gradient(135deg, var(--bg-card) 0%, {{PRIMARY_COLOR}}15 100%); border-radius: 20px; padding: 2rem; margin-bottom: 2rem; border: 1px solid var(--border); text-align: center; }
-        .impact-score { font-size: 4rem; font-weight: 700; font-family: 'JetBrains Mono', monospace; background: linear-gradient(135deg, var(--accent-gold), var(--accent-primary)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
-        .ranking-badge { display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.75rem 1.5rem; border-radius: 50px; font-weight: 600; font-size: 1.1rem; margin-top: 1rem; }
-        
-        /* Persona */
-        .persona-section { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.5rem; margin-bottom: 2rem; }
-        .persona-card { background: var(--bg-card); border-radius: 16px; padding: 2rem; border: 1px solid var(--border); }
-        .persona-title { font-size: 1.75rem; font-weight: 700; margin-bottom: 0.5rem; color: var(--accent-tertiary); }
-        .persona-desc { color: var(--text-secondary); line-height: 1.7; }
-        .section-label { font-size: 0.85rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 0.5rem; }
-        
-        /* Charts */
-        .chart-section { background: var(--bg-card); border-radius: 16px; padding: 2rem; margin-bottom: 2rem; border: 1px solid var(--border); }
-        .chart-title { font-size: 1.25rem; font-weight: 600; margin-bottom: 1.5rem; color: var(--text-primary); }
-        .bar-chart { display: flex; flex-direction: column; gap: 0.75rem; }
-        .bar-row { display: flex; align-items: center; gap: 1rem; }
-        .bar-label { width: 50px; font-size: 0.85rem; color: var(--text-secondary); font-family: 'JetBrains Mono', monospace; }
-        .bar-container { flex: 1; height: 24px; background: var(--bg-secondary); border-radius: 12px; overflow: hidden; }
-        .bar-fill { height: 100%; background: linear-gradient(90deg, var(--accent-primary), var(--accent-secondary)); border-radius: 12px; }
-        .bar-value { width: 40px; text-align: right; font-size: 0.85rem; color: var(--text-muted); font-family: 'JetBrains Mono', monospace; }
-        .chart-note { color: var(--text-secondary); margin-top: 1.5rem; font-size: 0.9rem; }
-        .chart-note strong { color: var(--accent-tertiary); }
-        
-        /* Pie Chart */
-        .pie-chart { display: flex; justify-content: center; gap: 2rem; flex-wrap: wrap; }
-        .pie-item { display: flex; align-items: center; gap: 0.75rem; }
-        .pie-color { width: 16px; height: 16px; border-radius: 4px; }
-        .pie-text { font-size: 0.95rem; }
-        .pie-value { font-weight: 600; color: var(--text-primary); }
-        .pie-label { color: var(--text-secondary); margin-left: 0.25rem; }
-        
-        /* Calendar */
-        .calendar-grid { display: grid; grid-template-columns: repeat(53, 1fr); gap: 3px; margin-top: 1rem; }
-        .calendar-cell { aspect-ratio: 1; border-radius: 3px; background: var(--bg-secondary); }
+        /* Calendar color overrides */
         .calendar-cell.level-1 { background: {{PRIMARY_COLOR}}33; }
         .calendar-cell.level-2 { background: {{PRIMARY_COLOR}}55; }
         .calendar-cell.level-3 { background: {{PRIMARY_COLOR}}88; }
         .calendar-cell.level-4 { background: {{PRIMARY_COLOR}}bb; }
         .calendar-cell.level-5 { background: var(--accent-primary); }
-        .calendar-legend { display: flex; align-items: center; justify-content: flex-end; gap: 0.5rem; margin-top: 1rem; font-size: 0.8rem; color: var(--text-muted); }
-        .legend-cell { width: 12px; height: 12px; border-radius: 2px; }
-        
-        /* Hashtags */
-        .hashtag-cloud { display: flex; flex-wrap: wrap; gap: 0.75rem; }
-        .hashtag { background: var(--bg-secondary); padding: 0.5rem 1rem; border-radius: 50px; font-size: 0.9rem; color: var(--accent-tertiary); border: 1px solid var(--border); transition: all 0.2s; }
-        .hashtag:hover { background: var(--bg-hover); border-color: var(--accent-primary); }
-        .hashtag-count { color: var(--text-muted); font-size: 0.8rem; margin-left: 0.25rem; }
-        
-        /* Top Posts */
-        .top-posts { display: flex; flex-direction: column; gap: 1rem; }
-        .top-post { background: var(--bg-secondary); padding: 1.25rem; border-radius: 12px; border: 1px solid var(--border); }
-        .top-post-content { color: var(--text-primary); margin-bottom: 0.75rem; line-height: 1.6; }
-        .top-post-meta { display: flex; gap: 1rem; font-size: 0.85rem; color: var(--text-muted); flex-wrap: wrap; }
-        .meta-item { display: flex; align-items: center; gap: 0.25rem; }
-        
-        /* Footer */
-        .footer { text-align: center; padding: 3rem 2rem; color: var(--text-muted); font-size: 0.9rem; }
-        .footer a { color: var(--accent-tertiary); text-decoration: none; }
-        
-        /* Responsive */
-        @media (max-width: 768px) {
-            .container { padding: 1rem; }
-            .hero { padding: 2rem 1rem; }
-            .display-name { font-size: 1.75rem; }
-            .stat-value { font-size: 1.75rem; }
-            .impact-score { font-size: 3rem; }
-            .stats-grid { grid-template-columns: repeat(2, 1fr); }
-        }
     </style>
 </head>
 <body>
@@ -134,10 +27,11 @@
         <!-- Hero -->
         <section class="hero">
             <div class="hero-content">
-                <img src="{{ACCOUNT_AVATAR}}" alt="Avatar" class="avatar" crossorigin="anonymous">
-                <div class="year-badge">{{YEAR}} WRAPPED</div>
+                <img src="{{ACCOUNT_AVATAR}}" alt="Avatar" class="avatar">
+                <div class="year-tag">{{YEAR}} WRAPPED</div>
                 <h1 class="display-name">{{ACCOUNT_DISPLAY_NAME}}</h1>
                 <p class="handle">@{{ACCOUNT_ACCT}}</p>
+                <p class="subtitle">{{TOTAL_POSTS}} posts analyzed • Joined {{ACCOUNT_CREATED}}</p>
             </div>
         </section>
 
@@ -145,74 +39,114 @@
         {{AI_SECTION}}
 
         <!-- Quick Stats -->
-        <section class="stats-grid">
-            <div class="stat-card"><div class="stat-value">{{TOTAL_POSTS}}</div><div class="stat-label">Total Posts</div></div>
-            <div class="stat-card"><div class="stat-value">{{ORIGINAL_POSTS}}</div><div class="stat-label">Original Posts</div></div>
-            <div class="stat-card"><div class="stat-value">{{REBLOGS}}</div><div class="stat-label">Boosts</div></div>
-            <div class="stat-card"><div class="stat-value">{{REPLIES}}</div><div class="stat-label">Replies</div></div>
-            <div class="stat-card"><div class="stat-value">{{LONGEST_STREAK}}</div><div class="stat-label">Day Streak</div></div>
-            <div class="stat-card"><div class="stat-value">{{AVG_WORDS}}</div><div class="stat-label">Avg Words/Post</div></div>
+        <section>
+            <div class="section-header">
+                <div class="section-icon">📊</div>
+                <h2>By The Numbers</h2>
+            </div>
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-value">{{TOTAL_POSTS}}</div>
+                    <div class="stat-label">Total Posts</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">{{ORIGINAL_POSTS}}</div>
+                    <div class="stat-label">Original Posts</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">{{REBLOGS}}</div>
+                    <div class="stat-label">Boosts</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">{{REPLIES}}</div>
+                    <div class="stat-label">Replies</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">{{LONGEST_STREAK}}</div>
+                    <div class="stat-label">Day Streak</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">{{AVG_WORDS}}</div>
+                    <div class="stat-label">Avg Words/Post</div>
+                </div>
+            </div>
         </section>
 
         <!-- Social Impact -->
         <section class="impact-card">
-            <div class="section-label">Social Impact Score</div>
+            <div class="persona-label">Social Impact Score</div>
             <div class="impact-score">{{SOCIAL_IMPACT_SCORE}}</div>
             <div class="ranking-badge" style="background: {{RANKING_COLOR}}20; color: {{RANKING_COLOR}}; border: 1px solid {{RANKING_COLOR}}40;">
-                <span>{{RANKING_EMOJI}}</span><span>{{RANKING_TIER}}</span>
+                <span>{{RANKING_EMOJI}}</span>
+                <span>{{RANKING_TIER}}</span>
             </div>
-            <p style="color: var(--text-secondary); margin-top: 1rem; font-size: 0.9rem;">
+            <p style="color: var(--text-secondary); margin-top: 1rem; font-size: 0.95rem;">
                 {{TOTAL_FAVORITES}} favorites · {{TOTAL_REBLOGS_RECEIVED}} reblogs · {{TOTAL_REPLIES_RECEIVED}} replies received
             </p>
         </section>
 
         <!-- Persona & Chronotype -->
-        <section class="persona-section">
-            <div class="persona-card">
-                <div class="section-label">Your Persona</div>
-                <div class="persona-title">{{PERSONA_EMOJI}} {{PERSONA_NAME}}</div>
+        <section class="persona-card">
+            <div class="persona-item">
+                <div class="persona-label">Your Persona</div>
+                <div class="persona-value">{{PERSONA_EMOJI}} {{PERSONA_NAME}}</div>
                 <p class="persona-desc">{{PERSONA_DESC}}</p>
             </div>
-            <div class="persona-card">
-                <div class="section-label">Your Chronotype</div>
-                <div class="persona-title">{{CHRONOTYPE_EMOJI}} {{CHRONOTYPE_NAME}}</div>
+            <div class="persona-item">
+                <div class="persona-label">Your Chronotype</div>
+                <div class="persona-value">{{CHRONOTYPE_EMOJI}} {{CHRONOTYPE_NAME}}</div>
                 <p class="persona-desc">{{CHRONOTYPE_DESC}}</p>
             </div>
         </section>
 
         <!-- Monthly Activity -->
         <section class="chart-section">
-            <h3 class="chart-title">📅 Monthly Activity</h3>
+            <div class="section-header">
+                <div class="section-icon">📅</div>
+                <h3>Monthly Activity</h3>
+            </div>
             <div class="bar-chart">{{MONTHLY_BARS}}</div>
             <p class="chart-note">📈 Most active: <strong>{{MOST_ACTIVE_MONTH}}</strong> with {{MOST_ACTIVE_MONTH_COUNT}} posts</p>
         </section>
 
         <!-- Hourly Activity -->
         <section class="chart-section">
-            <h3 class="chart-title">⏰ Posting Hours</h3>
+            <div class="section-header">
+                <div class="section-icon">⏰</div>
+                <h3>Posting Hours</h3>
+            </div>
             <div class="bar-chart">{{HOURLY_BARS}}</div>
             <p class="chart-note">🔥 Peak hour: <strong>{{BUSIEST_HOUR}}:00</strong> with {{BUSIEST_HOUR_COUNT}} posts</p>
         </section>
 
         <!-- Weekly Pattern -->
         <section class="chart-section">
-            <h3 class="chart-title">📆 Weekly Pattern</h3>
+            <div class="section-header">
+                <div class="section-icon">📆</div>
+                <h3>Weekly Pattern</h3>
+            </div>
             <div class="bar-chart">{{WEEKDAY_BARS}}</div>
         </section>
 
         <!-- Content Distribution -->
         <section class="chart-section">
-            <h3 class="chart-title">📊 Content Distribution</h3>
+            <div class="section-header">
+                <div class="section-icon">🎯</div>
+                <h3>Content Distribution</h3>
+            </div>
             <div class="pie-chart">{{CONTENT_DIST}}</div>
         </section>
 
         <!-- Activity Calendar -->
         <section class="chart-section">
-            <h3 class="chart-title">🗓️ Activity Calendar</h3>
+            <div class="section-header">
+                <div class="section-icon">🗓️</div>
+                <h3>Activity Calendar</h3>
+            </div>
             {{CALENDAR_HTML}}
             <div class="calendar-legend">
                 <span>Less</span>
-                <div class="legend-cell" style="background: var(--bg-secondary)"></div>
+                <div class="legend-cell" style="background: var(--bg-elevated)"></div>
                 <div class="legend-cell" style="background: {{PRIMARY_COLOR}}33"></div>
                 <div class="legend-cell" style="background: {{PRIMARY_COLOR}}55"></div>
                 <div class="legend-cell" style="background: {{PRIMARY_COLOR}}88"></div>
@@ -224,13 +158,19 @@
 
         <!-- Hashtags -->
         <section class="chart-section">
-            <h3 class="chart-title">#️⃣ Top Hashtags</h3>
+            <div class="section-header">
+                <div class="section-icon">#️⃣</div>
+                <h3>Top Hashtags</h3>
+            </div>
             <div class="hashtag-cloud">{{HASHTAGS_HTML}}</div>
         </section>
 
         <!-- Top Posts -->
         <section class="chart-section">
-            <h3 class="chart-title">🏆 Top Posts by Engagement</h3>
+            <div class="section-header">
+                <div class="section-icon">🏆</div>
+                <h3>Top Posts by Engagement</h3>
+            </div>
             <div class="top-posts">{{TOP_POSTS_HTML}}</div>
         </section>
 
@@ -238,7 +178,8 @@
         <footer class="footer">
             <p>Generated with 💜 for the Fediverse</p>
             <p style="margin-top: 0.5rem">
-                <a href="{{ACCOUNT_URL}}" target="_blank">View Profile</a> · Powered by fedi-wrap
+                <a href="{{ACCOUNT_URL}}" target="_blank">View Profile</a> · 
+                Powered by fedi-wrap
             </p>
             <p style="margin-top: 0.5rem; font-size: 0.8rem;">
                 First post: {{FIRST_POST}} · Last post: {{LAST_POST}}
@@ -247,4 +188,3 @@
     </div>
 </body>
 </html>
-
