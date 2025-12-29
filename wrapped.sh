@@ -14,6 +14,53 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # Load configuration
 [ -f "$SCRIPT_DIR/.env" ] && source "$SCRIPT_DIR/.env"
 
+# ============================================
+# Dependency Check
+# ============================================
+
+check_dependencies() {
+    local missing=()
+    local optional_missing=()
+    
+    # Required tools
+    command -v jq >/dev/null 2>&1 || missing+=("jq (JSON processor - install via: brew install jq / apt install jq)")
+    command -v curl >/dev/null 2>&1 || missing+=("curl (HTTP client - install via: brew install curl / apt install curl)")
+    command -v perl >/dev/null 2>&1 || missing+=("perl (text processing - usually pre-installed)")
+    command -v sed >/dev/null 2>&1 || missing+=("sed (stream editor - usually pre-installed)")
+    
+    # Optional tools (with fallbacks or conditional use)
+    command -v toot >/dev/null 2>&1 || optional_missing+=("toot (Mastodon CLI - needed for fetching, install via: pip install toot)")
+    command -v python3 >/dev/null 2>&1 || optional_missing+=("python3 (fallback JSON parser - install via: brew install python3 / apt install python3)")
+    command -v bc >/dev/null 2>&1 || optional_missing+=("bc (calculator for number formatting - install via: brew install bc / apt install bc)")
+    
+    # Report missing required tools
+    if [ ${#missing[@]} -gt 0 ]; then
+        echo ""
+        echo "❌ Missing required dependencies:"
+        echo ""
+        for tool in "${missing[@]}"; do
+            echo "   • $tool"
+        done
+        echo ""
+        echo "Please install the missing tools and try again."
+        exit 1
+    fi
+    
+    # Warn about optional missing tools
+    if [ ${#optional_missing[@]} -gt 0 ]; then
+        echo ""
+        echo "⚠️  Optional tools not found (some features may be limited):"
+        echo ""
+        for tool in "${optional_missing[@]}"; do
+            echo "   • $tool"
+        done
+        echo ""
+    fi
+}
+
+# Run dependency check immediately
+check_dependencies
+
 # Defaults
 DEFAULT_YEAR="${DEFAULT_YEAR:-2025}"
 OLLAMA_BASE_URL="${OLLAMA_BASE_URL:-http://localhost:11434}"
@@ -383,6 +430,97 @@ generate_report() {
         ) | join("")) + "</div>"
     ')
     
+    # Helper function to extract JSON from AI response
+    extract_json() {
+        local resp="$1"
+        local json=""
+        local temp_file=$(mktemp)
+        echo "$resp" > "$temp_file"
+        
+        # Method 1: Try to extract from markdown code blocks (```json ... ```)
+        if echo "$resp" | grep -q '```json'; then
+            json=$(sed -n '/```json/,/```/p' "$temp_file" | sed '1s/.*```json//; $s/```.*$//' | sed '/^$/d')
+            if [ -n "$json" ] && echo "$json" | jq . >/dev/null 2>&1; then
+                rm -f "$temp_file"
+                echo "$json"
+                return
+            fi
+        fi
+        
+        # Method 2: Try to extract from plain code blocks (``` ... ```)
+        if echo "$resp" | grep -q '```'; then
+            json=$(sed -n '/```/,/```/p' "$temp_file" | sed '1s/.*```//; $s/```.*$//' | sed '/^$/d')
+            if [ -n "$json" ] && echo "$json" | jq . >/dev/null 2>&1; then
+                rm -f "$temp_file"
+                echo "$json"
+                return
+            fi
+        fi
+        
+        # Method 3: Try the raw response
+        json="$resp"
+        if echo "$json" | jq . >/dev/null 2>&1; then
+            rm -f "$temp_file"
+            echo "$json"
+            return
+        fi
+        
+        # Method 4: Try to extract JSON object using Python (handles nested structures)
+        json=$(python3 << 'PYEOF'
+import sys
+import json
+
+text = sys.stdin.read()
+
+# Try to find the first complete JSON object
+start_idx = text.find('{')
+if start_idx != -1:
+    depth = 0
+    in_string = False
+    escape_next = False
+    
+    for i in range(start_idx, len(text)):
+        char = text[i]
+        
+        if escape_next:
+            escape_next = False
+            continue
+            
+        if char == '\\':
+            escape_next = True
+            continue
+            
+        if char == '"' and not escape_next:
+            in_string = not in_string
+            continue
+            
+        if not in_string:
+            if char == '{':
+                depth += 1
+            elif char == '}':
+                depth -= 1
+                if depth == 0:
+                    # Found complete JSON object
+                    json_str = text[start_idx:i+1]
+                    try:
+                        json.loads(json_str)  # Validate it's valid JSON
+                        print(json_str)
+                        exit(0)
+                    except:
+                        pass
+PYEOF
+ <<< "$resp" 2>/dev/null)
+        
+        if [ -n "$json" ] && echo "$json" | jq . >/dev/null 2>&1; then
+            rm -f "$temp_file"
+            echo "$json"
+            return
+        fi
+        
+        rm -f "$temp_file"
+        echo ""
+    }
+    
     # AI Section (only if reachable)
     local AI_SECTION=""
     if [ "$SKIP_AI" = false ]; then
@@ -425,12 +563,16 @@ generate_report() {
                     -d @"$TEMP_REQ" 2>/dev/null | jq -r '.response // empty')
                 
                 if [ -n "$CHUNK_RESP" ]; then
-                    local CLEAN_RESP=$(echo "$CHUNK_RESP" | sed 's/^```json//;s/```$//' | tr -d '\n')
-                    if echo "$CLEAN_RESP" | jq . >/dev/null 2>&1; then
-                        CHUNK_ANALYSES="${CHUNK_ANALYSES}Chunk $((chunk+1)): ${CLEAN_RESP}\n"
+                    local CLEAN_RESP=$(extract_json "$CHUNK_RESP")
+                    if [ -n "$CLEAN_RESP" ] && echo "$CLEAN_RESP" | jq . >/dev/null 2>&1; then
+                        # Compact JSON to single line for storage
+                        local COMPACT_JSON=$(echo "$CLEAN_RESP" | jq -c .)
+                        CHUNK_ANALYSES="${CHUNK_ANALYSES}Chunk $((chunk+1)): ${COMPACT_JSON}\n"
                         echo "      ✓ Got analysis"
                     else
                         echo "      ✗ Invalid JSON"
+                        # Debug: save failed response for inspection
+                        echo "$CHUNK_RESP" > "$SCRIPT_DIR/.failed_chunk_${chunk}.txt" 2>/dev/null || true
                     fi
                 else
                     echo "      ✗ No response"
@@ -457,9 +599,9 @@ generate_report() {
                 rm -f "$SCRIPT_DIR/.ai_synth.json"
                 
                 if [ -n "$AI_RESP" ]; then
-                    local AI_JSON=$(echo "$AI_RESP" | sed 's/^```json//;s/```$//' | tr -d '\n')
+                    local AI_JSON=$(extract_json "$AI_RESP")
                     
-                    if echo "$AI_JSON" | jq . >/dev/null 2>&1; then
+                    if [ -n "$AI_JSON" ] && echo "$AI_JSON" | jq . >/dev/null 2>&1; then
                         local AI_MOOD=$(echo "$AI_JSON" | jq -r '.mood // "Engaged"')
                         local AI_MOOD_D=$(echo "$AI_JSON" | jq -r '.mood_desc // ""')
                         local AI_PERS=$(echo "$AI_JSON" | jq -r '.persona // "Active"')
