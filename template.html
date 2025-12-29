@@ -5,21 +5,331 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ACCOUNT_DISPLAY_NAME}} - {{YEAR}} Wrapped</title>
     <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="styles.css">
     <style>
-        /* Theme overrides - colors are injected per-user */
-        :root {
-            --accent-primary: {{PRIMARY_COLOR}};
-            --accent-secondary: {{SECONDARY_COLOR}};
-            --glow-primary: {{GLOW_COLOR}};
-        }
-        
-        /* Calendar color overrides */
-        .calendar-cell.level-1 { background: {{PRIMARY_COLOR}}33; }
-        .calendar-cell.level-2 { background: {{PRIMARY_COLOR}}55; }
-        .calendar-cell.level-3 { background: {{PRIMARY_COLOR}}88; }
-        .calendar-cell.level-4 { background: {{PRIMARY_COLOR}}bb; }
-        .calendar-cell.level-5 { background: var(--accent-primary); }
+/**
+ * Fedi-Wrap Styles - Self-contained
+ */
+
+:root {
+    /* Background colors */
+    --bg-deep: #0d1117;
+    --bg-surface: #161b22;
+    --bg-elevated: #21262d;
+    --bg-hover: #30363d;
+    
+    /* Text colors */
+    --text-primary: #e6edf3;
+    --text-secondary: #8b949e;
+    --text-muted: #6e7681;
+    
+    /* Accent colors - overridden per year */
+    --accent-primary: {{PRIMARY_COLOR}};
+    --accent-secondary: {{SECONDARY_COLOR}};
+    --accent-cyan: #58a6ff;
+    --accent-green: #3fb950;
+    --accent-orange: #d29922;
+    --accent-purple: #a371f7;
+    --accent-pink: #f778ba;
+    --accent-red: #f85149;
+    --accent-gold: #fbbf24;
+    
+    /* Borders and effects */
+    --border: rgba(88, 166, 255, 0.2);
+    --border-muted: rgba(88, 166, 255, 0.1);
+    --glow-cyan: {{GLOW_COLOR}};
+    --glow-purple: rgba(163, 113, 247, 0.1);
+}
+
+/* Reset */
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+/* Base */
+body {
+    font-family: 'Crimson Pro', Georgia, serif;
+    background: var(--bg-deep);
+    color: var(--text-primary);
+    line-height: 1.7;
+    min-height: 100vh;
+    background-image: 
+        radial-gradient(ellipse at 20% 0%, var(--glow-cyan) 0%, transparent 50%),
+        radial-gradient(ellipse at 80% 100%, var(--glow-purple) 0%, transparent 50%);
+}
+
+.container { max-width: 900px; margin: 0 auto; padding: 2rem 1.5rem; }
+
+/* Hero Section */
+.hero { text-align: center; padding: 4rem 2rem; margin-bottom: 3rem; position: relative; }
+.hero::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 400px;
+    height: 400px;
+    background: radial-gradient(circle, var(--glow-cyan) 0%, transparent 70%);
+    pointer-events: none;
+    z-index: 0;
+}
+.hero-content { position: relative; z-index: 1; }
+.avatar {
+    width: 120px;
+    height: 120px;
+    border-radius: 50%;
+    border: 4px solid var(--accent-primary);
+    margin-bottom: 1.5rem;
+    box-shadow: 0 0 40px var(--glow-cyan);
+}
+.year-tag {
+    display: inline-block;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.85rem;
+    color: var(--accent-cyan);
+    border: 1px solid var(--accent-cyan);
+    padding: 0.4rem 1.2rem;
+    border-radius: 50px;
+    letter-spacing: 3px;
+    margin-bottom: 1.5rem;
+}
+.hero h1, .display-name {
+    font-size: 3rem;
+    font-weight: 700;
+    margin-bottom: 0.5rem;
+    background: linear-gradient(135deg, var(--text-primary) 0%, var(--accent-cyan) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+.hero .handle, .handle { font-family: 'IBM Plex Mono', monospace; color: var(--text-secondary); font-size: 1.1rem; }
+.hero .subtitle { color: var(--text-muted); font-size: 1rem; margin-top: 1rem; font-style: italic; }
+
+/* Section Headers */
+.section-header { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1.5rem; }
+.section-header h2, .section-header h3 { font-size: 1.5rem; font-weight: 600; color: var(--text-primary); }
+.section-icon {
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--bg-elevated);
+    border-radius: 8px;
+    font-size: 1.1rem;
+}
+.section-label {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    color: var(--text-muted);
+    margin-bottom: 0.5rem;
+}
+
+/* Narrative / AI Insights */
+.narrative-section, .ai-insights {
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 2.5rem;
+    margin-bottom: 2rem;
+    position: relative;
+}
+.narrative-section::before {
+    content: '"';
+    position: absolute;
+    top: 1rem;
+    left: 1.5rem;
+    font-size: 5rem;
+    color: var(--accent-cyan);
+    opacity: 0.2;
+    font-family: Georgia, serif;
+    line-height: 1;
+}
+.narrative-text, .narrative {
+    font-size: 1.35rem;
+    line-height: 1.9;
+    color: var(--text-primary);
+    padding-left: 1rem;
+    border-left: 3px solid var(--accent-cyan);
+    font-style: italic;
+}
+.ai-insights h2 { font-size: 1.5rem; margin-bottom: 1.5rem; display: flex; align-items: center; gap: 0.5rem; }
+
+/* Persona Cards */
+.persona-card {
+    background: linear-gradient(135deg, var(--bg-surface) 0%, rgba(88, 166, 255, 0.05) 100%);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 2rem;
+    margin-bottom: 2rem;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 2rem;
+}
+.persona-item { padding: 1.5rem; background: var(--bg-elevated); border-radius: 12px; }
+.persona-label {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    color: var(--text-muted);
+    margin-bottom: 0.5rem;
+}
+.persona-value { font-size: 1.5rem; font-weight: 600; color: var(--accent-cyan); margin-bottom: 0.5rem; }
+.persona-desc { color: var(--text-secondary); font-size: 0.95rem; line-height: 1.6; }
+.persona-title { font-size: 1.75rem; font-weight: 700; margin-bottom: 0.5rem; color: var(--accent-purple); }
+
+/* AI Grid Cards */
+.ai-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.5rem; }
+.ai-card { background: var(--bg-elevated); border-radius: 12px; padding: 1.5rem; }
+.ai-card-title { font-family: 'IBM Plex Mono', monospace; font-size: 0.85rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 0.75rem; }
+.ai-card-value { font-size: 1.25rem; font-weight: 600; color: var(--accent-cyan); margin-bottom: 0.5rem; }
+.ai-card-desc { color: var(--text-secondary); font-size: 0.9rem; line-height: 1.6; }
+
+/* Stats Grid */
+.stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem; margin-bottom: 2rem; }
+.stat-card {
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.25rem;
+    text-align: center;
+    transition: transform 0.3s, box-shadow 0.3s;
+}
+.stat-card:hover { transform: translateY(-4px); box-shadow: 0 8px 30px rgba(88, 166, 255, 0.15); }
+.stat-value { font-family: 'IBM Plex Mono', monospace; font-size: 2rem; font-weight: 600; color: var(--accent-cyan); }
+.stat-label { font-size: 0.85rem; color: var(--text-muted); margin-top: 0.25rem; }
+
+/* Impact Card */
+.impact-card {
+    background: linear-gradient(135deg, var(--bg-surface) 0%, rgba(88, 166, 255, 0.05) 100%);
+    border-radius: 20px;
+    padding: 2rem;
+    margin-bottom: 2rem;
+    border: 1px solid var(--border);
+    text-align: center;
+}
+.impact-score {
+    font-size: 4rem;
+    font-weight: 700;
+    font-family: 'IBM Plex Mono', monospace;
+    background: linear-gradient(135deg, var(--accent-gold), var(--accent-cyan));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+.ranking-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.75rem 1.5rem;
+    border-radius: 50px;
+    font-weight: 600;
+    font-size: 1.1rem;
+    margin-top: 1rem;
+}
+
+/* Traits */
+.traits-container { background: var(--bg-surface); border: 1px solid var(--border); border-radius: 16px; padding: 2rem; margin-bottom: 2rem; }
+.traits-grid, .trait-list { display: flex; flex-wrap: wrap; gap: 0.75rem; }
+.trait-tag {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.85rem;
+    padding: 0.5rem 1rem;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: 50px;
+    color: var(--text-secondary);
+    transition: all 0.2s;
+}
+.trait-tag:hover { border-color: var(--accent-green); color: var(--accent-green); }
+
+/* Fun Facts */
+.fun-facts, .fun-fact {
+    background: linear-gradient(135deg, var(--bg-surface) 0%, rgba(247, 120, 186, 0.05) 100%);
+    border: 1px solid rgba(247, 120, 186, 0.2);
+    border-radius: 16px;
+    padding: 2rem;
+    margin-bottom: 2rem;
+}
+.fun-fact { padding: 1rem 1.5rem; margin-top: 1.5rem; display: flex; align-items: flex-start; gap: 0.75rem; }
+.fun-fact-item { display: flex; gap: 1rem; margin-bottom: 1rem; padding-bottom: 1rem; border-bottom: 1px solid var(--border); }
+.fun-fact-item:last-child { margin-bottom: 0; padding-bottom: 0; border-bottom: none; }
+.fun-fact-icon { font-size: 1.5rem; flex-shrink: 0; }
+.fun-fact-text { color: var(--text-secondary); line-height: 1.6; }
+
+/* Charts */
+.chart-section { background: var(--bg-surface); border-radius: 16px; padding: 2rem; margin-bottom: 2rem; border: 1px solid var(--border); }
+.chart-title { font-size: 1.25rem; font-weight: 600; margin-bottom: 1.5rem; color: var(--text-primary); }
+.bar-chart { display: flex; flex-direction: column; gap: 0.75rem; }
+.bar-row { display: flex; align-items: center; gap: 1rem; }
+.bar-label { width: 50px; font-size: 0.85rem; color: var(--text-secondary); font-family: 'IBM Plex Mono', monospace; }
+.bar-container { flex: 1; height: 24px; background: var(--bg-elevated); border-radius: 12px; overflow: hidden; }
+.bar-fill { height: 100%; background: linear-gradient(90deg, var(--accent-cyan), var(--accent-purple)); border-radius: 12px; transition: width 0.5s ease; }
+.bar-value { width: 40px; text-align: right; font-size: 0.85rem; color: var(--text-muted); font-family: 'IBM Plex Mono', monospace; }
+.chart-note { color: var(--text-secondary); margin-top: 1.5rem; font-size: 0.9rem; }
+.chart-note strong { color: var(--accent-cyan); }
+
+/* Pie Chart */
+.pie-chart { display: flex; justify-content: center; gap: 2rem; flex-wrap: wrap; }
+.pie-item { display: flex; align-items: center; gap: 0.75rem; }
+.pie-color { width: 16px; height: 16px; border-radius: 4px; }
+.pie-text { font-size: 0.95rem; }
+.pie-value { font-weight: 600; color: var(--text-primary); }
+.pie-label { color: var(--text-secondary); margin-left: 0.25rem; }
+
+/* Calendar */
+.calendar-grid { display: grid; grid-template-columns: repeat(53, 1fr); gap: 3px; margin-top: 1rem; }
+.calendar-cell { aspect-ratio: 1; border-radius: 3px; background: var(--bg-elevated); }
+.calendar-cell.level-1 { background: {{PRIMARY_COLOR}}33; }
+.calendar-cell.level-2 { background: {{PRIMARY_COLOR}}55; }
+.calendar-cell.level-3 { background: {{PRIMARY_COLOR}}88; }
+.calendar-cell.level-4 { background: {{PRIMARY_COLOR}}bb; }
+.calendar-cell.level-5 { background: var(--accent-primary); }
+.calendar-legend { display: flex; align-items: center; justify-content: flex-end; gap: 0.5rem; margin-top: 1rem; font-size: 0.8rem; color: var(--text-muted); }
+.legend-cell { width: 12px; height: 12px; border-radius: 2px; }
+
+/* Hashtags */
+.hashtag-cloud { display: flex; flex-wrap: wrap; gap: 0.75rem; }
+.hashtag { background: var(--bg-elevated); padding: 0.5rem 1rem; border-radius: 50px; font-size: 0.9rem; color: var(--accent-cyan); border: 1px solid var(--border); transition: all 0.2s; }
+.hashtag:hover { background: var(--bg-hover); border-color: var(--accent-cyan); }
+.hashtag-count { color: var(--text-muted); font-size: 0.8rem; margin-left: 0.25rem; }
+
+/* Top Posts */
+.top-posts { display: flex; flex-direction: column; gap: 1rem; }
+.top-post { background: var(--bg-elevated); padding: 1.25rem; border-radius: 12px; border: 1px solid var(--border); }
+.top-post-content { color: var(--text-primary); margin-bottom: 0.75rem; line-height: 1.6; }
+.top-post-meta { display: flex; gap: 1rem; font-size: 0.85rem; color: var(--text-muted); flex-wrap: wrap; }
+.meta-item { display: flex; align-items: center; gap: 0.25rem; }
+
+/* Word Cloud */
+.word-cloud { background: var(--bg-surface); border: 1px solid var(--border); border-radius: 16px; padding: 2rem; margin-bottom: 2rem; text-align: center; }
+.word-cloud-inner { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.5rem 1rem; }
+.word { font-size: var(--word-size, 1rem); color: var(--word-color, var(--text-secondary)); opacity: var(--word-opacity, 0.8); transition: opacity 0.2s; }
+.word:hover { opacity: 1; }
+
+/* Footer */
+.footer { text-align: center; padding: 3rem 2rem; color: var(--text-muted); font-size: 0.9rem; }
+.footer a { color: var(--accent-cyan); text-decoration: none; }
+.footer a:hover { text-decoration: underline; }
+
+/* Responsive */
+@media (max-width: 768px) {
+    .container { padding: 1rem; }
+    .hero { padding: 2rem 1rem; }
+    .hero h1, .display-name { font-size: 2rem; }
+    .persona-card { grid-template-columns: 1fr; }
+    .narrative-text, .narrative { font-size: 1.15rem; }
+    .stat-value { font-size: 1.75rem; }
+    .impact-score { font-size: 3rem; }
+    .stats-grid { grid-template-columns: repeat(2, 1fr); }
+    .calendar-grid { gap: 2px; }
+}
+
+@media print {
+    body { background: white; color: black; }
+    .stat-card, .persona-card, .chart-section, .ai-insights { break-inside: avoid; }
+}
     </style>
 </head>
 <body>
@@ -45,30 +355,12 @@
                 <h2>By The Numbers</h2>
             </div>
             <div class="stats-grid">
-                <div class="stat-card">
-                    <div class="stat-value">{{TOTAL_POSTS}}</div>
-                    <div class="stat-label">Total Posts</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-value">{{ORIGINAL_POSTS}}</div>
-                    <div class="stat-label">Original Posts</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-value">{{REBLOGS}}</div>
-                    <div class="stat-label">Boosts</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-value">{{REPLIES}}</div>
-                    <div class="stat-label">Replies</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-value">{{LONGEST_STREAK}}</div>
-                    <div class="stat-label">Day Streak</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-value">{{AVG_WORDS}}</div>
-                    <div class="stat-label">Avg Words/Post</div>
-                </div>
+                <div class="stat-card"><div class="stat-value">{{TOTAL_POSTS}}</div><div class="stat-label">Total Posts</div></div>
+                <div class="stat-card"><div class="stat-value">{{ORIGINAL_POSTS}}</div><div class="stat-label">Original Posts</div></div>
+                <div class="stat-card"><div class="stat-value">{{REBLOGS}}</div><div class="stat-label">Boosts</div></div>
+                <div class="stat-card"><div class="stat-value">{{REPLIES}}</div><div class="stat-label">Replies</div></div>
+                <div class="stat-card"><div class="stat-value">{{LONGEST_STREAK}}</div><div class="stat-label">Day Streak</div></div>
+                <div class="stat-card"><div class="stat-value">{{AVG_WORDS}}</div><div class="stat-label">Avg Words/Post</div></div>
             </div>
         </section>
 
@@ -77,8 +369,7 @@
             <div class="persona-label">Social Impact Score</div>
             <div class="impact-score">{{SOCIAL_IMPACT_SCORE}}</div>
             <div class="ranking-badge" style="background: {{RANKING_COLOR}}20; color: {{RANKING_COLOR}}; border: 1px solid {{RANKING_COLOR}}40;">
-                <span>{{RANKING_EMOJI}}</span>
-                <span>{{RANKING_TIER}}</span>
+                <span>{{RANKING_EMOJI}}</span><span>{{RANKING_TIER}}</span>
             </div>
             <p style="color: var(--text-secondary); margin-top: 1rem; font-size: 0.95rem;">
                 {{TOTAL_FAVORITES}} favorites · {{TOTAL_REBLOGS_RECEIVED}} reblogs · {{TOTAL_REPLIES_RECEIVED}} replies received
@@ -101,48 +392,33 @@
 
         <!-- Monthly Activity -->
         <section class="chart-section">
-            <div class="section-header">
-                <div class="section-icon">📅</div>
-                <h3>Monthly Activity</h3>
-            </div>
+            <div class="section-header"><div class="section-icon">📅</div><h3>Monthly Activity</h3></div>
             <div class="bar-chart">{{MONTHLY_BARS}}</div>
             <p class="chart-note">📈 Most active: <strong>{{MOST_ACTIVE_MONTH}}</strong> with {{MOST_ACTIVE_MONTH_COUNT}} posts</p>
         </section>
 
         <!-- Hourly Activity -->
         <section class="chart-section">
-            <div class="section-header">
-                <div class="section-icon">⏰</div>
-                <h3>Posting Hours</h3>
-            </div>
+            <div class="section-header"><div class="section-icon">⏰</div><h3>Posting Hours</h3></div>
             <div class="bar-chart">{{HOURLY_BARS}}</div>
             <p class="chart-note">🔥 Peak hour: <strong>{{BUSIEST_HOUR}}:00</strong> with {{BUSIEST_HOUR_COUNT}} posts</p>
         </section>
 
         <!-- Weekly Pattern -->
         <section class="chart-section">
-            <div class="section-header">
-                <div class="section-icon">📆</div>
-                <h3>Weekly Pattern</h3>
-            </div>
+            <div class="section-header"><div class="section-icon">📆</div><h3>Weekly Pattern</h3></div>
             <div class="bar-chart">{{WEEKDAY_BARS}}</div>
         </section>
 
         <!-- Content Distribution -->
         <section class="chart-section">
-            <div class="section-header">
-                <div class="section-icon">🎯</div>
-                <h3>Content Distribution</h3>
-            </div>
+            <div class="section-header"><div class="section-icon">🎯</div><h3>Content Distribution</h3></div>
             <div class="pie-chart">{{CONTENT_DIST}}</div>
         </section>
 
         <!-- Activity Calendar -->
         <section class="chart-section">
-            <div class="section-header">
-                <div class="section-icon">🗓️</div>
-                <h3>Activity Calendar</h3>
-            </div>
+            <div class="section-header"><div class="section-icon">🗓️</div><h3>Activity Calendar</h3></div>
             {{CALENDAR_HTML}}
             <div class="calendar-legend">
                 <span>Less</span>
@@ -158,32 +434,21 @@
 
         <!-- Hashtags -->
         <section class="chart-section">
-            <div class="section-header">
-                <div class="section-icon">#️⃣</div>
-                <h3>Top Hashtags</h3>
-            </div>
+            <div class="section-header"><div class="section-icon">#️⃣</div><h3>Top Hashtags</h3></div>
             <div class="hashtag-cloud">{{HASHTAGS_HTML}}</div>
         </section>
 
         <!-- Top Posts -->
         <section class="chart-section">
-            <div class="section-header">
-                <div class="section-icon">🏆</div>
-                <h3>Top Posts by Engagement</h3>
-            </div>
+            <div class="section-header"><div class="section-icon">🏆</div><h3>Top Posts by Engagement</h3></div>
             <div class="top-posts">{{TOP_POSTS_HTML}}</div>
         </section>
 
         <!-- Footer -->
         <footer class="footer">
             <p>Generated with 💜 for the Fediverse</p>
-            <p style="margin-top: 0.5rem">
-                <a href="{{ACCOUNT_URL}}" target="_blank">View Profile</a> · 
-                Powered by fedi-wrap
-            </p>
-            <p style="margin-top: 0.5rem; font-size: 0.8rem;">
-                First post: {{FIRST_POST}} · Last post: {{LAST_POST}}
-            </p>
+            <p style="margin-top: 0.5rem"><a href="{{ACCOUNT_URL}}" target="_blank">View Profile</a> · Powered by fedi-wrap</p>
+            <p style="margin-top: 0.5rem; font-size: 0.8rem;">First post: {{FIRST_POST}} · Last post: {{LAST_POST}}</p>
         </footer>
     </div>
 </body>

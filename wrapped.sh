@@ -246,19 +246,35 @@ generate_report() {
     # Use full handle (user@instance)
     local ACCT_HANDLE="$ACCOUNT"
     
-    # Download avatar locally
+    # Download avatar and convert to base64 for self-contained HTML
     mkdir -p "$AVATAR_DIR"
     local AVATAR_EXT="${ACCT_AVATAR_URL##*.}"
     [ "$AVATAR_EXT" = "$ACCT_AVATAR_URL" ] && AVATAR_EXT="png"
     AVATAR_EXT="${AVATAR_EXT%%\?*}"  # Remove query params
-    local ACCT_AVATAR="avatars/${ACCOUNT//@/_}.$AVATAR_EXT"
-    local AVATAR_PATH="$SCRIPT_DIR/$ACCT_AVATAR"
+    local AVATAR_PATH="$AVATAR_DIR/${ACCOUNT//@/_}.$AVATAR_EXT"
+    local ACCT_AVATAR=""
     
-    if [ ! -f "$AVATAR_PATH" ] && [ -n "$ACCT_AVATAR_URL" ]; then
-        echo "📥 Downloading avatar..."
-        curl -sL "$ACCT_AVATAR_URL" -o "$AVATAR_PATH" 2>/dev/null || ACCT_AVATAR="$ACCT_AVATAR_URL"
+    if [ -n "$ACCT_AVATAR_URL" ]; then
+        # Download if not cached
+        if [ ! -f "$AVATAR_PATH" ]; then
+            echo "📥 Downloading avatar..."
+            curl -sL "$ACCT_AVATAR_URL" -o "$AVATAR_PATH" 2>/dev/null
+        fi
+        
+        # Convert to base64 data URI for self-contained HTML
+        if [ -f "$AVATAR_PATH" ]; then
+            local MIME_TYPE="image/png"
+            case "$AVATAR_EXT" in
+                jpg|jpeg) MIME_TYPE="image/jpeg" ;;
+                gif) MIME_TYPE="image/gif" ;;
+                webp) MIME_TYPE="image/webp" ;;
+            esac
+            local B64=$(base64 < "$AVATAR_PATH" | tr -d '\n')
+            ACCT_AVATAR="data:$MIME_TYPE;base64,$B64"
+        else
+            ACCT_AVATAR="$ACCT_AVATAR_URL"
+        fi
     fi
-    [ ! -f "$AVATAR_PATH" ] && ACCT_AVATAR="$ACCT_AVATAR_URL"
     
     if [ -n "$CUSTOM_OUTPUT" ]; then
         OUTPUT_FILE="$CUSTOM_OUTPUT"
